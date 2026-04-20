@@ -1,0 +1,1672 @@
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #f7f7f8;
+    --bg-block: #f1f1f3;
+    --bg-block-hover: #e9e9ec;
+    --border: #e4e4e7;
+    --text: #18181b;
+    --text-soft: #71717a;
+    --text-faint: #a1a1aa;
+    --accent: #2563eb;
+    --accent-soft: #dbeafe;
+    --accent-text: #1e40af;
+    --warn: #ea580c;
+    --warn-soft: #fed7aa;
+    --warn-text: #9a3412;
+    --danger: #dc2626;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  }
+  html, body {
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: var(--text);
+    background: var(--bg);
+    overflow: hidden;
+  }
+  button { font-family: inherit; }
+  input, textarea { font-family: inherit; }
+
+  #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+  #main-row { display: flex; flex: 1; min-height: 0; }
+
+  /* Sidebar */
+  #sidebar {
+    width: 280px; background: var(--bg-soft); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0;
+  }
+  .sidebar-header {
+    padding: 12px 14px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .logo { font-weight: 600; font-size: 14px; letter-spacing: -0.01em; font-family: var(--mono); }
+  .logo .dot { color: var(--accent); }
+  .sidebar-scroll { flex: 1; overflow-y: auto; padding: 6px 0; }
+  .sidebar-footer {
+    padding: 8px 10px; border-top: 1px solid var(--border);
+    display: flex; gap: 6px;
+  }
+
+  .tree-item {
+    display: flex; align-items: center; padding: 5px 14px; cursor: pointer;
+    font-size: 13px; user-select: none; line-height: 1.3; gap: 6px;
+  }
+  .tree-item:hover { background: rgba(0,0,0,0.04); }
+  .tree-item.active { background: var(--accent-soft); color: var(--accent-text); }
+  .tree-item.folder { color: var(--text-soft); }
+  .tree-item.drop-target { background: var(--accent-soft); outline: 1px dashed var(--accent); outline-offset: -1px; }
+  .tree-item.dragging { opacity: 0.4; }
+  .tree-item .icon { font-size: 11px; opacity: 0.65; width: 12px; text-align: center; flex-shrink: 0; }
+  .tree-item .name {
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .tree-item .actions {
+    background: none; border: none; opacity: 0; font-size: 15px; padding: 2px 4px;
+    color: var(--text-soft); cursor: pointer; border-radius: 3px;
+  }
+  .tree-item:hover .actions { opacity: 1; }
+  .tree-item .actions:hover { background: rgba(0,0,0,0.08); }
+
+  /* Main */
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+  #main-header {
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 4px; min-height: 48px;
+  }
+  #menu-btn { display: none; background: none; border: none; font-size: 20px; cursor: pointer; padding: 4px 8px; color: var(--text); }
+  #conv-title { flex: 1; font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .header-btn {
+    background: none; border: none; font-size: 16px; cursor: pointer; padding: 6px 10px;
+    color: var(--text-soft); border-radius: 6px;
+  }
+  .header-btn:hover { color: var(--text); background: var(--bg-soft); }
+
+  /* Blocks list */
+  #blocks-scroll { flex: 1; overflow-y: auto; padding: 16px 12px 4px; }
+  #blocks { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 4px; }
+
+  .block {
+    position: relative; background: var(--bg-block); border-radius: 12px;
+    padding: 9px 12px; max-width: 85%; align-self: flex-start;
+    word-wrap: break-word; transition: background 0.15s;
+  }
+  .block:hover { background: var(--bg-block-hover); }
+  .block.dragging { opacity: 0.4; }
+  .block.drop-above { box-shadow: 0 -3px 0 var(--accent); }
+  .block.drop-below { box-shadow: 0 3px 0 var(--accent); }
+  .block.highlight { animation: pulse 1.2s ease-out; }
+  @keyframes pulse {
+    0% { background: #fef3c7; }
+    100% { background: var(--bg-block); }
+  }
+
+  .block-body { font-size: 15px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .block-body h1 { font-size: 1.4em; margin: 0.3em 0; }
+  .block-body h2 { font-size: 1.2em; margin: 0.3em 0; }
+  .block-body h3 { font-size: 1.05em; margin: 0.3em 0; }
+  .block-body code {
+    background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px;
+    font-size: 0.88em; font-family: var(--mono);
+  }
+  .block-body pre {
+    background: rgba(0,0,0,0.06); padding: 8px 12px; border-radius: 6px;
+    overflow-x: auto; margin: 6px 0; white-space: pre;
+  }
+  .block-body pre code { background: none; padding: 0; }
+  .block-body a { color: var(--accent); }
+  .block-body blockquote {
+    border-left: 3px solid var(--text-faint); padding-left: 10px;
+    color: var(--text-soft); margin: 4px 0;
+  }
+  .block-body ul { padding-left: 20px; margin: 4px 0; }
+
+  .block-meta {
+    margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    font-size: 11px; color: var(--text-faint);
+  }
+  .block-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+  .tag-pill {
+    display: inline-block; background: var(--accent-soft); color: var(--accent-text);
+    padding: 1px 7px; border-radius: 10px; font-size: 11px; cursor: pointer;
+    font-weight: 500;
+  }
+  .cite-pill {
+    display: inline-block; background: var(--warn-soft); color: var(--warn-text);
+    padding: 1px 6px; border-radius: 4px; font-size: 0.9em; cursor: pointer;
+    border: 1px solid rgba(154,52,18,0.2); font-weight: 500;
+  }
+  .cite-pill.deleted { background: #f3f4f6; color: var(--text-faint); border-color: transparent; }
+  .block-time { color: var(--text-faint); margin-left: auto; }
+  .block-menu-btn {
+    background: none; border: none; color: var(--text-faint); cursor: pointer;
+    padding: 0 4px; font-size: 16px; line-height: 1; border-radius: 3px;
+  }
+  .block-menu-btn:hover { background: rgba(0,0,0,0.08); color: var(--text); }
+
+  .block.divider {
+    background: transparent; align-self: stretch; max-width: none;
+    padding: 14px 0 6px; text-align: center;
+  }
+  .block.divider:hover { background: transparent; }
+  .divider-line {
+    position: relative; border-top: 1px dashed var(--text-faint);
+    display: flex; justify-content: center;
+  }
+  .divider-label {
+    background: var(--bg); padding: 0 10px; margin-top: -7px;
+    font-size: 10px; color: var(--text-faint); text-transform: uppercase;
+    letter-spacing: 0.15em; font-family: var(--mono); cursor: pointer;
+  }
+
+  /* Edit mode */
+  .block.editing { background: var(--bg); border: 2px solid var(--accent); padding: 8px 10px; max-width: 85%; }
+  .block-edit-textarea {
+    width: 100%; border: none; font-size: 15px; font-family: inherit; outline: none;
+    resize: none; line-height: 1.5; background: transparent; color: var(--text);
+  }
+  .block-edit-hint {
+    margin-top: 6px; font-size: 11px; color: var(--text-faint);
+  }
+  .block-edit-hint kbd {
+    background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px;
+    font-family: var(--mono); font-size: 10px;
+  }
+
+  /* Composer */
+  #composer {
+    border-top: 1px solid var(--border); padding: 8px 10px;
+    display: flex; gap: 8px; align-items: flex-end; background: var(--bg);
+  }
+  #composer-input {
+    flex: 1; border: 1px solid var(--border); border-radius: 18px;
+    padding: 8px 14px; font-size: 15px; resize: none;
+    max-height: 180px; min-height: 38px; outline: none; line-height: 1.4;
+    background: var(--bg-soft);
+  }
+  #composer-input:focus { border-color: var(--accent); background: var(--bg); }
+  #send-btn {
+    width: 38px; height: 38px; border-radius: 50%; border: none;
+    background: var(--accent); color: white; cursor: pointer; font-size: 18px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  #send-btn:hover { background: #1d4ed8; }
+  #send-btn:disabled { background: var(--text-faint); cursor: not-allowed; }
+
+  .empty-state {
+    text-align: center; padding: 60px 20px; color: var(--text-faint); font-size: 14px;
+  }
+  .empty-state .hint {
+    margin-top: 12px; font-size: 12px; font-family: var(--mono);
+    background: var(--bg-soft); display: inline-block; padding: 6px 10px; border-radius: 6px;
+  }
+
+  /* Status bar */
+  #status-bar {
+    height: 22px; background: #0a0a0a; color: #86efac;
+    font-family: var(--mono); font-size: 10.5px;
+    display: flex; align-items: center; padding: 0 12px; gap: 14px;
+    letter-spacing: 0.02em; flex-shrink: 0; cursor: pointer;
+    user-select: none;
+  }
+  #status-bar:hover { background: #171717; }
+  #status-bar .dot { color: #86efac; font-size: 8px; }
+  #status-bar .dim { opacity: 0.55; }
+  #status-bar .saving .dot { color: #fde047; }
+  #status-bar .saving { color: #fde047; }
+  #status-bar.has-errors { color: #fca5a5; }
+  #status-bar.has-errors .dot { color: #fca5a5; animation: blink 1.5s ease-in-out infinite; }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  #status-bar .error-count {
+    background: #991b1b; color: #fecaca; padding: 1px 6px; border-radius: 8px;
+    font-size: 9.5px; font-weight: 700;
+  }
+  #status-bar .toggle { margin-left: auto; opacity: 0.55; }
+
+  /* Error log panel — expandable from the status bar */
+  #error-panel {
+    background: #0a0a0a; color: #e4e4e7; border-top: 1px solid #262626;
+    max-height: 0; overflow: hidden; transition: max-height 0.2s ease;
+    font-family: var(--mono); font-size: 11px;
+    flex-shrink: 0;
+  }
+  #error-panel.open { max-height: 280px; }
+  .error-panel-header {
+    display: flex; align-items: center; padding: 6px 12px;
+    border-bottom: 1px solid #262626; background: #171717;
+    gap: 10px;
+  }
+  .error-panel-header .title {
+    font-weight: 600; font-size: 10.5px; color: #a3a3a3;
+    letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .error-panel-header .spacer { flex: 1; }
+  .error-panel-header button {
+    background: transparent; border: 1px solid #404040; color: #a3a3a3;
+    font-family: var(--mono); font-size: 10px; padding: 2px 8px;
+    border-radius: 3px; cursor: pointer;
+  }
+  .error-panel-header button:hover { background: #262626; color: #e4e4e7; }
+  .error-panel-list {
+    overflow-y: auto; max-height: 240px; padding: 4px 0;
+  }
+  .error-panel-entry {
+    padding: 6px 12px; border-bottom: 1px solid #171717;
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+  .error-panel-entry:last-child { border-bottom: none; }
+  .error-panel-entry .sev {
+    flex-shrink: 0; font-size: 9.5px; font-weight: 700;
+    padding: 1px 6px; border-radius: 3px; margin-top: 1px;
+    min-width: 44px; text-align: center;
+  }
+  .error-panel-entry .sev.error { background: #7f1d1d; color: #fecaca; }
+  .error-panel-entry .sev.warn  { background: #78350f; color: #fed7aa; }
+  .error-panel-entry .sev.info  { background: #1e3a8a; color: #bfdbfe; }
+  .error-panel-entry .time {
+    flex-shrink: 0; color: #737373; font-size: 10px; margin-top: 2px;
+  }
+  .error-panel-entry .body {
+    flex: 1; min-width: 0; color: #e4e4e7; word-break: break-word;
+    line-height: 1.45;
+  }
+  .error-panel-entry .body .source {
+    color: #737373; font-size: 10px; margin-top: 2px;
+  }
+  .error-panel-entry details { margin-top: 4px; }
+  .error-panel-entry details summary {
+    cursor: pointer; color: #a3a3a3; font-size: 10px; user-select: none;
+  }
+  .error-panel-entry details pre {
+    background: #000; color: #fca5a5; padding: 6px 8px; border-radius: 3px;
+    margin-top: 4px; white-space: pre-wrap; word-break: break-word;
+    font-size: 10px; max-height: 160px; overflow-y: auto;
+  }
+  .error-panel-empty {
+    padding: 20px; text-align: center; color: #525252; font-size: 11px;
+  }
+
+  /* Inline error banner for user-facing problems */
+  #error-banner {
+    display: none; background: #fef2f2; color: #991b1b;
+    border-bottom: 1px solid #fecaca; padding: 8px 14px;
+    font-size: 13px; align-items: center; gap: 10px;
+  }
+  #error-banner.visible { display: flex; }
+  #error-banner .msg { flex: 1; }
+  #error-banner button {
+    background: transparent; border: 1px solid #fca5a5; color: #991b1b;
+    padding: 3px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;
+  }
+  #error-banner button:hover { background: #fee2e2; }
+
+  /* Overlays */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+    padding: 20px;
+  }
+  .overlay.hidden { display: none; }
+  .modal {
+    background: var(--bg); border-radius: 12px; max-width: 480px; width: 100%;
+    max-height: 80vh; display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+  }
+  .modal-header {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    font-weight: 600; font-size: 14px;
+  }
+  .modal-input {
+    padding: 12px 16px; border: none; border-bottom: 1px solid var(--border);
+    font-size: 15px; outline: none; width: 100%;
+  }
+  .modal-list { flex: 1; overflow-y: auto; max-height: 360px; }
+  .modal-item {
+    padding: 10px 16px; cursor: pointer; border-bottom: 1px solid var(--bg-soft);
+    font-size: 14px; line-height: 1.4;
+  }
+  .modal-item:hover, .modal-item.selected { background: var(--accent-soft); }
+  .modal-item .hint { font-size: 11px; color: var(--text-faint); margin-top: 2px; font-family: var(--mono); }
+  .modal-footer {
+    padding: 10px 16px; border-top: 1px solid var(--border);
+    display: flex; justify-content: flex-end; gap: 8px;
+  }
+  .btn {
+    padding: 7px 13px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg); cursor: pointer; font-size: 13px; color: var(--text);
+  }
+  .btn:hover { background: var(--bg-soft); }
+  .btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .btn.primary:hover { background: #1d4ed8; }
+  .btn.danger { color: var(--danger); }
+
+  /* Action sheet */
+  #action-sheet {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200;
+    display: flex; align-items: flex-end; justify-content: center;
+  }
+  #action-sheet.hidden { display: none; }
+  .action-sheet-inner {
+    background: var(--bg); border-radius: 14px 14px 0 0; width: 100%; max-width: 500px;
+    padding: 4px 0 env(safe-area-inset-bottom, 4px);
+    animation: slideUp 0.2s ease-out;
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  @media (min-width: 600px) {
+    #action-sheet { align-items: center; padding: 20px; }
+    .action-sheet-inner { border-radius: 14px; padding: 4px 0; }
+  }
+  .action-sheet-item {
+    padding: 14px 20px; font-size: 15px; cursor: pointer;
+    border-bottom: 1px solid var(--bg-soft); user-select: none;
+  }
+  .action-sheet-item:hover { background: var(--bg-soft); }
+  .action-sheet-item.danger { color: var(--danger); }
+  .action-sheet-item.cancel {
+    font-weight: 600; text-align: center; border-top: 6px solid var(--bg-soft);
+    border-bottom: none;
+  }
+
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+    background: #18181b; color: white; padding: 8px 16px; border-radius: 20px;
+    font-size: 13px; z-index: 300; opacity: 0; transition: opacity 0.2s;
+    pointer-events: none;
+  }
+  #toast.visible { opacity: 1; }
+
+  /* Sidebar overlay (mobile) */
+  #sidebar-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 50;
+  }
+  #sidebar-overlay.visible { display: block; }
+
+  /* Mobile */
+  @media (max-width: 768px) {
+    #menu-btn { display: block; }
+    #sidebar {
+      position: fixed; top: 0; left: 0; height: 100%; z-index: 60; width: 260px;
+      transform: translateX(-100%); transition: transform 0.2s;
+      box-shadow: 2px 0 16px rgba(0,0,0,0.15);
+    }
+    #sidebar.open { transform: translateX(0); }
+    .block { max-width: 92%; }
+    .block-menu-btn { opacity: 1; }
+    .tree-item .actions { opacity: 1; }
+  }
+</style>
+
+<div id="app">
+  <div id="error-banner">
+    <span class="msg"></span>
+    <button id="error-banner-dismiss">Dismiss</button>
+  </div>
+  <div id="main-row">
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo"><span class="dot">●</span> writing</div>
+        <button class="header-btn" id="new-conv-btn" title="New conversation">＋</button>
+      </div>
+      <div class="sidebar-scroll" id="tree"></div>
+      <div class="sidebar-footer">
+        <button class="btn" id="new-folder-btn">+ folder</button>
+        <button class="btn" id="export-all-btn" title="Backup all data as JSON" style="margin-left:auto">⎘</button>
+      </div>
+    </aside>
+    <main id="main">
+      <header id="main-header">
+        <button id="menu-btn" title="Menu">☰</button>
+        <div id="conv-title">—</div>
+        <button class="header-btn" id="copy-btn" title="Copy conversation as Markdown">⎘</button>
+        <button class="header-btn" id="export-btn" title="Download conversation as Markdown">⤓</button>
+      </header>
+      <div id="blocks-scroll">
+        <div id="blocks"></div>
+      </div>
+      <div id="composer">
+        <textarea id="composer-input" placeholder="Write something..." rows="1"></textarea>
+        <button id="send-btn" type="button" title="Send (Enter)">↑</button>
+      </div>
+    </main>
+  </div>
+  <div id="status-bar">
+    <span class="dot">●</span>
+    <span id="status-state">synced</span>
+    <span class="dim">·</span>
+    <span id="status-blocks">0 blocks</span>
+    <span class="dim">·</span>
+    <span id="status-path" class="dim"></span>
+    <span id="status-errors" style="display:none"><span class="error-count" id="error-count">0</span></span>
+    <span class="toggle" id="status-toggle">▴ log</span>
+  </div>
+  <div id="error-panel">
+    <div class="error-panel-header">
+      <span class="title">Event log</span>
+      <span class="spacer"></span>
+      <button id="error-panel-test">Test error</button>
+      <button id="error-panel-clear">Clear</button>
+      <button id="error-panel-close">Close</button>
+    </div>
+    <div class="error-panel-list" id="error-panel-list">
+      <div class="error-panel-empty">No events yet.</div>
+    </div>
+  </div>
+</div>
+
+<div id="sidebar-overlay"></div>
+
+<div id="picker-overlay" class="overlay hidden">
+  <div class="modal">
+    <div class="modal-header" id="picker-title">Cite a block</div>
+    <input class="modal-input" id="picker-input" placeholder="Search blocks..." />
+    <div class="modal-list" id="picker-results"></div>
+    <div class="modal-footer">
+      <button class="btn" id="picker-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="prompt-overlay" class="overlay hidden">
+  <div class="modal">
+    <div class="modal-header" id="prompt-title">Prompt</div>
+    <input class="modal-input" id="prompt-input" />
+    <div class="modal-footer">
+      <button class="btn" id="prompt-cancel">Cancel</button>
+      <button class="btn primary" id="prompt-ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="action-sheet" class="hidden">
+  <div class="action-sheet-inner" id="action-sheet-inner"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ===== Error reporting (first thing — must be available to everything below) =====
+  const ErrorLog = {
+    entries: [],
+    unreadErrors: 0,
+    maxEntries: 200,
+  };
+
+  function nowIso() {
+    const d = new Date();
+    return d.toTimeString().slice(0, 8);
+  }
+
+  function report(severity, message, details) {
+    const entry = {
+      id: Math.random().toString(36).slice(2),
+      severity,  // 'error' | 'warn' | 'info'
+      time: nowIso(),
+      message: String(message || '(no message)'),
+      details: details ? String(details) : null,
+    };
+    ErrorLog.entries.push(entry);
+    if (ErrorLog.entries.length > ErrorLog.maxEntries) ErrorLog.entries.shift();
+    if (severity === 'error') {
+      ErrorLog.unreadErrors++;
+      // Also surface errors in the top banner so they can't be missed
+      showErrorBanner(entry.message);
+    }
+    renderErrorPanel();
+    updateStatusBarErrors();
+    // Always also log to console — useful when console IS available
+    try {
+      (console[severity] || console.log).call(console, '[' + severity + ']', message, details || '');
+    } catch {}
+  }
+
+  function showErrorBanner(msg) {
+    const banner = document.getElementById('error-banner');
+    if (!banner) return;
+    banner.querySelector('.msg').textContent = '⚠ ' + msg;
+    banner.classList.add('visible');
+  }
+  function hideErrorBanner() {
+    const banner = document.getElementById('error-banner');
+    if (banner) banner.classList.remove('visible');
+  }
+
+  function renderErrorPanel() {
+    const list = document.getElementById('error-panel-list');
+    if (!list) return;
+    if (ErrorLog.entries.length === 0) {
+      list.innerHTML = '<div class="error-panel-empty">No events yet.</div>';
+      return;
+    }
+    // Newest first
+    const html = ErrorLog.entries.slice().reverse().map(e => {
+      const detailsHtml = e.details
+        ? `<details><summary>details</summary><pre>${escHtml(e.details)}</pre></details>`
+        : '';
+      return `
+        <div class="error-panel-entry">
+          <span class="sev ${e.severity}">${e.severity.toUpperCase()}</span>
+          <span class="time">${e.time}</span>
+          <div class="body">${escHtml(e.message)}${detailsHtml}</div>
+        </div>`;
+    }).join('');
+    list.innerHTML = html;
+  }
+
+  function updateStatusBarErrors() {
+    const bar = document.getElementById('status-bar');
+    const wrap = document.getElementById('status-errors');
+    const count = document.getElementById('error-count');
+    if (!bar || !wrap || !count) return;
+    if (ErrorLog.unreadErrors > 0) {
+      bar.classList.add('has-errors');
+      wrap.style.display = '';
+      count.textContent = String(ErrorLog.unreadErrors);
+    } else {
+      bar.classList.remove('has-errors');
+      wrap.style.display = 'none';
+    }
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/[&<>"']/g, c =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // Global catchers — everything unhandled ends up visible
+  window.addEventListener('error', e => {
+    const msg = e.message || 'Uncaught error';
+    const where = e.filename ? `${e.filename}:${e.lineno}:${e.colno}` : '';
+    report('error', msg, (e.error && e.error.stack) || where);
+  });
+  window.addEventListener('unhandledrejection', e => {
+    const reason = e.reason;
+    const msg = (reason && reason.message) || String(reason) || 'Unhandled promise rejection';
+    const stack = reason && reason.stack;
+    report('error', msg, stack);
+  });
+
+  // Expose for debugging / for hand-wired reports from anywhere
+  window.__report = report;
+
+  // ===== Utils =====
+  const uuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+  const now = () => Date.now();
+  const esc = s => String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const $ = sel => document.querySelector(sel);
+
+  // ===== State =====
+  const State = {
+    workspace: { folders: [], conversations: [], tags: [] },
+    blocks: {},            // conv_id -> Block[]
+    currentConvId: null,
+    editingBlockId: null,
+    savingCount: 0,
+    pickerContext: null,   // { cursorPos, filterText }
+    draggedBlockId: null,
+    draggedSidebarItem: null, // {type: 'folder'|'conv', id}
+    actionSheetContext: null,
+    promptResolve: null,
+  };
+
+  // ===== Storage =====
+  async function loadWorkspace() {
+    try {
+      const r = await window.storage.get('workspace');
+      State.workspace = JSON.parse(r.value);
+      if (!State.workspace.tags) State.workspace.tags = [];
+      if (!State.workspace.lastConvId) State.workspace.lastConvId = null;
+    } catch {
+      // First run — seed a default folder + conversation
+      const rootId = uuid();
+      const convId = uuid();
+      State.workspace = {
+        folders: [{ id: rootId, parent_id: null, name: 'personal' }],
+        conversations: [{ id: convId, folder_id: rootId, name: 'journal' }],
+        tags: [],
+        lastConvId: convId,
+      };
+      State.blocks[convId] = [];
+      await saveWorkspace();
+      await saveBlocks(convId);
+    }
+  }
+
+  async function saveWorkspace() {
+    State.savingCount++; renderStatus();
+    try {
+      await window.storage.set('workspace', JSON.stringify(State.workspace));
+    } catch (e) {
+      report('error', 'Failed to save workspace: ' + (e.message || e), e.stack);
+      toast('Save failed');
+    }
+    State.savingCount--; renderStatus();
+  }
+
+  async function loadBlocks(convId) {
+    if (State.blocks[convId]) return;
+    try {
+      const r = await window.storage.get(`blocks:${convId}`);
+      State.blocks[convId] = JSON.parse(r.value);
+    } catch {
+      State.blocks[convId] = [];
+    }
+  }
+
+  async function saveBlocks(convId) {
+    State.savingCount++; renderStatus();
+    try {
+      await window.storage.set(`blocks:${convId}`, JSON.stringify(State.blocks[convId] || []));
+    } catch (e) {
+      report('error', `Failed to save blocks for conversation ${convId}: ` + (e.message || e), e.stack);
+      toast('Save failed');
+    }
+    State.savingCount--; renderStatus();
+  }
+
+  // ===== Finders =====
+  function findBlockAnywhere(id) {
+    for (const [convId, blocks] of Object.entries(State.blocks)) {
+      const b = blocks.find(b => b.id === id);
+      if (b) return { block: b, convId };
+    }
+    return null;
+  }
+  function findConv(id) { return State.workspace.conversations.find(c => c.id === id); }
+  function findFolder(id) { return State.workspace.folders.find(f => f.id === id); }
+
+  function findOrCreateTag(name) {
+    name = name.toLowerCase();
+    let tag = State.workspace.tags.find(t => t.name === name);
+    if (!tag) {
+      tag = { id: uuid(), name };
+      State.workspace.tags.push(tag);
+    }
+    return tag;
+  }
+
+  function parseInlineTags(body) {
+    const re = /(^|\s)#([a-zA-Z0-9_-]+)/g;
+    const names = new Set();
+    let m;
+    while ((m = re.exec(body)) !== null) names.add(m[2].toLowerCase());
+    return [...names];
+  }
+
+  async function gcTags() {
+    const used = new Set();
+    for (const blocks of Object.values(State.blocks)) {
+      for (const b of blocks) (b.tags || []).forEach(id => used.add(id));
+    }
+    const before = State.workspace.tags.length;
+    State.workspace.tags = State.workspace.tags.filter(t => used.has(t.id));
+    return State.workspace.tags.length !== before;
+  }
+
+  function previewText(body, n = 80) {
+    if (!body) return '(empty)';
+    let t = body.replace(/\{\{block:[a-f0-9-]+\}\}/g, '↪').replace(/\s+/g, ' ').trim();
+    if (t.length > n) t = t.slice(0, n) + '…';
+    return t || '(empty)';
+  }
+
+  // ===== Markdown =====
+  function renderMarkdown(text) {
+    if (!text) return '';
+    let html = esc(text);
+    // Code blocks
+    html = html.replace(/```([^]*?)```/g, (m, code) => `<pre><code>${code.trim()}</code></pre>`);
+    // Inline code
+    html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    // Citations
+    html = html.replace(/\{\{block:([a-f0-9-]+)\}\}/g, (m, id) => {
+      const r = findBlockAnywhere(id);
+      if (!r) return `<span class="cite-pill deleted">[deleted]</span>`;
+      return `<span class="cite-pill" data-cite-id="${id}" title="Jump to block">↪ ${esc(previewText(r.block.body, 50))}</span>`;
+    });
+    // Tags
+    html = html.replace(/(^|\s)#([a-zA-Z0-9_-]+)/g, '$1<span class="tag-pill">#$2</span>');
+    // Headings
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    // Bold, italic
+    html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/(^|\W)\*([^*\n]+)\*(?=\W|$)/g, '$1<em>$2</em>');
+    // Links
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    // Blockquote
+    html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+    // List items
+    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li>[^]+?<\/li>(\n|$))+/g, m => `<ul>${m.replace(/\n/g, '')}</ul>`);
+    return html;
+  }
+
+  // ===== Rendering =====
+  function renderSidebar() {
+    const tree = $('#tree');
+    tree.innerHTML = '';
+
+    function renderFolder(folder, depth) {
+      const el = document.createElement('div');
+      el.className = 'tree-item folder';
+      el.style.paddingLeft = `${10 + depth * 14}px`;
+      el.dataset.folderId = folder.id;
+      el.draggable = true;
+      el.innerHTML =
+        `<span class="icon">▾</span>` +
+        `<span class="name">${esc(folder.name)}</span>` +
+        `<button class="actions" data-folder-actions="${folder.id}">⋯</button>`;
+      tree.appendChild(el);
+
+      State.workspace.folders
+        .filter(f => f.parent_id === folder.id)
+        .forEach(f => renderFolder(f, depth + 1));
+
+      State.workspace.conversations
+        .filter(c => c.folder_id === folder.id)
+        .forEach(c => {
+          const cel = document.createElement('div');
+          cel.className = 'tree-item' + (c.id === State.currentConvId ? ' active' : '');
+          cel.style.paddingLeft = `${10 + (depth + 1) * 14}px`;
+          cel.dataset.convId = c.id;
+          cel.draggable = true;
+          cel.innerHTML =
+            `<span class="icon">◆</span>` +
+            `<span class="name">${esc(c.name)}</span>` +
+            `<button class="actions" data-conv-actions="${c.id}">⋯</button>`;
+          tree.appendChild(cel);
+        });
+    }
+
+    State.workspace.folders
+      .filter(f => f.parent_id === null)
+      .forEach(f => renderFolder(f, 0));
+
+    if (State.workspace.folders.length === 0) {
+      tree.innerHTML = '<div class="empty-state" style="padding:20px 14px;font-size:12px">No folders yet. Create one to start.</div>';
+    }
+  }
+
+  function renderBlocks() {
+    const container = $('#blocks');
+    container.innerHTML = '';
+    const convId = State.currentConvId;
+
+    if (!convId) {
+      container.innerHTML =
+        `<div class="empty-state">Pick or create a conversation.<div class="hint">Sidebar → + conv</div></div>`;
+      return;
+    }
+
+    const blocks = State.blocks[convId] || [];
+    if (blocks.length === 0) {
+      container.innerHTML =
+        `<div class="empty-state">Nothing written yet.<br>` +
+        `<div class="hint">Markdown · #tag · @cite · --- for divider</div></div>`;
+      return;
+    }
+
+    blocks.forEach(b => container.appendChild(renderBlock(b)));
+
+    // Auto-scroll to bottom after render
+    requestAnimationFrame(() => {
+      const scroll = $('#blocks-scroll');
+      scroll.scrollTop = scroll.scrollHeight;
+    });
+  }
+
+  function renderBlock(b) {
+    const el = document.createElement('div');
+    el.className = 'block' + (b.type === 'divider' ? ' divider' : '');
+    el.dataset.blockId = b.id;
+    el.draggable = true;
+
+    if (b.type === 'divider') {
+      const label = b.body?.trim() || 'topic';
+      el.innerHTML = `<div class="divider-line"><span class="divider-label" data-divider-edit="${b.id}">${esc(label)}</span></div>`;
+      return el;
+    }
+
+    if (State.editingBlockId === b.id) {
+      el.classList.add('editing');
+      el.draggable = false;
+      el.innerHTML =
+        `<textarea class="block-edit-textarea" data-edit-id="${b.id}">${esc(b.body || '')}</textarea>` +
+        `<div class="block-edit-hint"><kbd>↵</kbd> save · <kbd>Esc</kbd> cancel</div>`;
+      return el;
+    }
+
+    const tagPills = (b.tags || [])
+      .map(tid => State.workspace.tags.find(t => t.id === tid))
+      .filter(Boolean)
+      .map(t => `<span class="tag-pill">#${esc(t.name)}</span>`)
+      .join('');
+
+    const date = new Date(b.created_at);
+    const timeStr = date.toLocaleString([], { hour: '2-digit', minute: '2-digit' });
+
+    el.innerHTML =
+      `<div class="block-body">${renderMarkdown(b.body || '')}</div>` +
+      `<div class="block-meta">` +
+        `<div class="block-tags">${tagPills}</div>` +
+        `<span class="block-time">${timeStr}</span>` +
+        `<button class="block-menu-btn" data-block-menu="${b.id}">⋯</button>` +
+      `</div>`;
+    return el;
+  }
+
+  function renderStatus() {
+    const convId = State.currentConvId;
+    const count = (State.blocks[convId] || []).length;
+    $('#status-blocks').textContent = `${count} block${count === 1 ? '' : 's'}`;
+    const saving = State.savingCount > 0;
+    $('#status-bar').classList.toggle('saving', saving);
+    $('#status-state').textContent = saving ? 'saving…' : 'synced';
+
+    let path = '';
+    if (convId) {
+      const conv = findConv(convId);
+      if (conv) {
+        const segs = [conv.name];
+        let f = findFolder(conv.folder_id);
+        while (f) { segs.unshift(f.name); f = f.parent_id ? findFolder(f.parent_id) : null; }
+        path = '/' + segs.join('/');
+      }
+    }
+    $('#status-path').textContent = path;
+    $('#conv-title').textContent = convId ? (findConv(convId)?.name || '—') : '—';
+  }
+
+  function renderAll() { renderSidebar(); renderBlocks(); renderStatus(); }
+
+  // ===== Prompt modal =====
+  function prompt(title, initial = '') {
+    return new Promise(resolve => {
+      State.promptResolve = resolve;
+      $('#prompt-title').textContent = title;
+      const input = $('#prompt-input');
+      input.value = initial;
+      $('#prompt-overlay').classList.remove('hidden');
+      setTimeout(() => input.focus(), 50);
+    });
+  }
+  function closePrompt(val) {
+    $('#prompt-overlay').classList.add('hidden');
+    if (State.promptResolve) { State.promptResolve(val); State.promptResolve = null; }
+  }
+
+  // ===== Toast =====
+  let toastTimer = null;
+  function toast(msg) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('visible');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('visible'), 1800);
+  }
+
+  // ===== Action sheet =====
+  function showActionSheet(items) {
+    const inner = $('#action-sheet-inner');
+    inner.innerHTML = '';
+    items.forEach(it => {
+      const el = document.createElement('div');
+      el.className = 'action-sheet-item' + (it.danger ? ' danger' : '') + (it.cancel ? ' cancel' : '');
+      el.textContent = it.label;
+      el.addEventListener('click', () => {
+        closeActionSheet();
+        if (it.onClick) it.onClick();
+      });
+      inner.appendChild(el);
+    });
+    $('#action-sheet').classList.remove('hidden');
+  }
+  function closeActionSheet() { $('#action-sheet').classList.add('hidden'); }
+
+  // ===== Citation picker =====
+  function openCitePicker(onPick) {
+    const overlay = $('#picker-overlay');
+    const input = $('#picker-input');
+    const results = $('#picker-results');
+    input.value = '';
+
+    const allBlocks = [];
+    for (const conv of State.workspace.conversations) {
+      const blocks = State.blocks[conv.id] || [];
+      blocks.filter(b => b.type !== 'divider').forEach(b =>
+        allBlocks.push({ block: b, conv }));
+    }
+    allBlocks.sort((a, b) => b.block.created_at - a.block.created_at);
+
+    function renderResults(filter) {
+      results.innerHTML = '';
+      const filtered = filter
+        ? allBlocks.filter(x => x.block.body.toLowerCase().includes(filter.toLowerCase()))
+        : allBlocks;
+      if (filtered.length === 0) {
+        results.innerHTML = '<div class="empty-state" style="padding:20px">No blocks found.</div>';
+        return;
+      }
+      filtered.slice(0, 50).forEach(({ block, conv }) => {
+        const el = document.createElement('div');
+        el.className = 'modal-item';
+        el.innerHTML =
+          `<div>${esc(previewText(block.body, 120))}</div>` +
+          `<div class="hint">${esc(conv.name)}</div>`;
+        el.addEventListener('click', () => {
+          overlay.classList.add('hidden');
+          onPick(block.id);
+        });
+        results.appendChild(el);
+      });
+    }
+    input.oninput = () => renderResults(input.value);
+    renderResults('');
+    overlay.classList.remove('hidden');
+    setTimeout(() => input.focus(), 50);
+  }
+
+  // ===== Actions =====
+  async function sendBlock() {
+    const input = $('#composer-input');
+    const body = input.value;
+    if (!body.trim() || !State.currentConvId) return;
+
+    const trimmed = body.trim();
+    const isDivider = /^---+$/.test(trimmed);
+    const tagIds = isDivider ? [] : parseInlineTags(body).map(n => findOrCreateTag(n).id);
+
+    const block = {
+      id: uuid(),
+      type: isDivider ? 'divider' : 'text',
+      body: isDivider ? '' : body,
+      tags: tagIds,
+      created_at: now(),
+      updated_at: now(),
+    };
+    State.blocks[State.currentConvId] = State.blocks[State.currentConvId] || [];
+    State.blocks[State.currentConvId].push(block);
+
+    input.value = '';
+    input.style.height = 'auto';
+    input.focus();
+    renderBlocks();
+    renderStatus();
+
+    await saveBlocks(State.currentConvId);
+    if (tagIds.length) await saveWorkspace();
+  }
+
+  function startEditBlock(id) {
+    State.editingBlockId = id;
+    renderBlocks();
+    setTimeout(() => {
+      const ta = document.querySelector(`[data-edit-id="${id}"]`);
+      if (ta) {
+        ta.focus();
+        ta.style.height = 'auto';
+        ta.style.height = ta.scrollHeight + 'px';
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+      }
+    }, 10);
+  }
+
+  async function saveEditBlock(id, newBody) {
+    const r = findBlockAnywhere(id);
+    if (!r) return;
+    r.block.body = newBody;
+    r.block.tags = parseInlineTags(newBody).map(n => findOrCreateTag(n).id);
+    r.block.updated_at = now();
+    State.editingBlockId = null;
+    await gcTags();
+    renderAll();
+    await saveBlocks(r.convId);
+    await saveWorkspace();
+  }
+
+  function cancelEditBlock() {
+    State.editingBlockId = null;
+    renderBlocks();
+  }
+
+  async function deleteBlock(id) {
+    const r = findBlockAnywhere(id);
+    if (!r) return;
+    State.blocks[r.convId] = State.blocks[r.convId].filter(b => b.id !== id);
+    await gcTags();
+    renderAll();
+    await saveBlocks(r.convId);
+    await saveWorkspace();
+  }
+
+  async function moveBlockToConv(blockId, targetConvId) {
+    const r = findBlockAnywhere(blockId);
+    if (!r || r.convId === targetConvId) return;
+    await loadBlocks(targetConvId);
+    State.blocks[r.convId] = State.blocks[r.convId].filter(b => b.id !== blockId);
+    State.blocks[targetConvId] = State.blocks[targetConvId] || [];
+    State.blocks[targetConvId].push(r.block);
+    renderAll();
+    await saveBlocks(r.convId);
+    await saveBlocks(targetConvId);
+    toast('Block moved');
+  }
+
+  async function reorderBlock(draggedId, targetId, position) {
+    // position: 'before' | 'after'
+    const convId = State.currentConvId;
+    const blocks = State.blocks[convId];
+    if (!blocks) return;
+    const dragIdx = blocks.findIndex(b => b.id === draggedId);
+    if (dragIdx < 0) return;
+    const [moved] = blocks.splice(dragIdx, 1);
+    let targetIdx = blocks.findIndex(b => b.id === targetId);
+    if (targetIdx < 0) { blocks.push(moved); }
+    else if (position === 'before') blocks.splice(targetIdx, 0, moved);
+    else blocks.splice(targetIdx + 1, 0, moved);
+    renderBlocks();
+    await saveBlocks(convId);
+  }
+
+  function moveBlockUpDown(id, dir) {
+    const convId = State.currentConvId;
+    const blocks = State.blocks[convId];
+    const i = blocks.findIndex(b => b.id === id);
+    if (i < 0) return;
+    const j = dir === 'up' ? i - 1 : i + 1;
+    if (j < 0 || j >= blocks.length) return;
+    [blocks[i], blocks[j]] = [blocks[j], blocks[i]];
+    renderBlocks();
+    saveBlocks(convId);
+  }
+
+  async function switchConversation(convId) {
+    if (State.currentConvId === convId) return;
+    await loadBlocks(convId);
+    State.currentConvId = convId;
+    State.workspace.lastConvId = convId;
+    saveWorkspace();
+    renderAll();
+    $('#sidebar').classList.remove('open');
+    $('#sidebar-overlay').classList.remove('visible');
+    $('#composer-input').focus();
+  }
+
+  async function newConversation() {
+    const name = await prompt('New conversation name');
+    if (!name) return;
+    // Place in the current conversation's folder, or first folder
+    let folderId;
+    const cur = findConv(State.currentConvId);
+    if (cur) folderId = cur.folder_id;
+    else if (State.workspace.folders[0]) folderId = State.workspace.folders[0].id;
+    else {
+      const rid = uuid();
+      State.workspace.folders.push({ id: rid, parent_id: null, name: 'root' });
+      folderId = rid;
+    }
+    const conv = { id: uuid(), folder_id: folderId, name };
+    State.workspace.conversations.push(conv);
+    State.blocks[conv.id] = [];
+    State.currentConvId = conv.id;
+    State.workspace.lastConvId = conv.id;
+    renderAll();
+    await saveWorkspace();
+    await saveBlocks(conv.id);
+  }
+
+  async function newFolder() {
+    const name = await prompt('New folder name');
+    if (!name) return;
+    const parentId = findConv(State.currentConvId)?.folder_id || null;
+    State.workspace.folders.push({ id: uuid(), parent_id: parentId, name });
+    renderAll();
+    await saveWorkspace();
+  }
+
+  async function renameItem(type, id) {
+    const item = type === 'folder' ? findFolder(id) : findConv(id);
+    if (!item) return;
+    const name = await prompt('Rename', item.name);
+    if (!name || name === item.name) return;
+    item.name = name;
+    renderAll();
+    await saveWorkspace();
+  }
+
+  async function deleteFolder(id) {
+    // Delete folder + all nested folders + all their conversations (+ blocks)
+    const toDelete = new Set([id]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      State.workspace.folders.forEach(f => {
+        if (toDelete.has(f.parent_id) && !toDelete.has(f.id)) { toDelete.add(f.id); grew = true; }
+      });
+    }
+    const convsToDelete = State.workspace.conversations
+      .filter(c => toDelete.has(c.folder_id))
+      .map(c => c.id);
+
+    for (const cid of convsToDelete) {
+      try { await window.storage.delete(`blocks:${cid}`); } catch {}
+      delete State.blocks[cid];
+    }
+    State.workspace.folders = State.workspace.folders.filter(f => !toDelete.has(f.id));
+    State.workspace.conversations = State.workspace.conversations.filter(c => !convsToDelete.includes(c.id));
+    if (convsToDelete.includes(State.currentConvId)) {
+      State.currentConvId = State.workspace.conversations[0]?.id || null;
+      if (State.currentConvId) await loadBlocks(State.currentConvId);
+    }
+    await gcTags();
+    renderAll();
+    await saveWorkspace();
+  }
+
+  async function deleteConversation(id) {
+    State.workspace.conversations = State.workspace.conversations.filter(c => c.id !== id);
+    try { await window.storage.delete(`blocks:${id}`); } catch {}
+    delete State.blocks[id];
+    if (State.currentConvId === id) {
+      State.currentConvId = State.workspace.conversations[0]?.id || null;
+      if (State.currentConvId) await loadBlocks(State.currentConvId);
+    }
+    await gcTags();
+    renderAll();
+    await saveWorkspace();
+  }
+
+  // ===== Export =====
+  function conversationToMarkdown(convId) {
+    const conv = findConv(convId); if (!conv) return '';
+    const blocks = State.blocks[convId] || [];
+    const lines = [`# ${conv.name}`, ''];
+    for (const b of blocks) {
+      if (b.type === 'divider') {
+        lines.push(''); lines.push(`--- *${b.body?.trim() || 'topic'}* ---`); lines.push('');
+        continue;
+      }
+      let body = b.body || '';
+      body = body.replace(/\{\{block:([a-f0-9-]+)\}\}/g, (m, id) => {
+        const r = findBlockAnywhere(id);
+        if (!r) return '[deleted]';
+        return `[${previewText(r.block.body, 60)}](#b-${id})`;
+      });
+      lines.push(body);
+      lines.push('');
+    }
+    return lines.join('\n');
+  }
+
+  function downloadText(filename, text) {
+    const blob = new Blob([text], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+  }
+
+  async function copyCurrentAsMarkdown() {
+    if (!State.currentConvId) return;
+    const md = conversationToMarkdown(State.currentConvId);
+    try {
+      await navigator.clipboard.writeText(md);
+      toast('Copied as Markdown');
+    } catch {
+      // Fallback
+      const ta = document.createElement('textarea');
+      ta.value = md; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+      toast('Copied as Markdown');
+    }
+  }
+
+  function exportCurrentAsMarkdown() {
+    if (!State.currentConvId) return;
+    const conv = findConv(State.currentConvId);
+    const md = conversationToMarkdown(State.currentConvId);
+    downloadText(`${conv.name}.md`, md);
+  }
+
+  async function exportAllAsJson() {
+    const data = {
+      exported_at: new Date().toISOString(),
+      workspace: State.workspace,
+      blocks: State.blocks,
+    };
+    // Ensure all blocks loaded
+    for (const c of State.workspace.conversations) await loadBlocks(c.id);
+    data.blocks = State.blocks;
+    downloadText(`writing-backup-${Date.now()}.json`, JSON.stringify(data, null, 2));
+  }
+
+  // ===== Menus =====
+  function showBlockActions(id) {
+    const r = findBlockAnywhere(id); if (!r) return;
+    const b = r.block;
+    const items = [];
+    if (b.type !== 'divider') items.push({ label: 'Edit', onClick: () => startEditBlock(id) });
+    items.push({ label: 'Move up', onClick: () => moveBlockUpDown(id, 'up') });
+    items.push({ label: 'Move down', onClick: () => moveBlockUpDown(id, 'down') });
+    items.push({ label: 'Move to conversation…', onClick: () => chooseConvForMove(id) });
+    if (b.type !== 'divider') items.push({ label: 'Copy text', onClick: async () => {
+      try { await navigator.clipboard.writeText(b.body || ''); toast('Copied'); } catch {}
+    }});
+    items.push({ label: 'Delete', danger: true, onClick: () => deleteBlock(id) });
+    items.push({ label: 'Cancel', cancel: true });
+    showActionSheet(items);
+  }
+
+  function chooseConvForMove(blockId) {
+    const overlay = $('#picker-overlay');
+    $('#picker-title').textContent = 'Move to…';
+    const input = $('#picker-input');
+    input.value = '';
+    input.placeholder = 'Find conversation...';
+    const results = $('#picker-results');
+
+    function render(filter) {
+      results.innerHTML = '';
+      const convs = State.workspace.conversations
+        .filter(c => !filter || c.name.toLowerCase().includes(filter.toLowerCase()))
+        .filter(c => c.id !== State.currentConvId);
+      if (convs.length === 0) {
+        results.innerHTML = '<div class="empty-state" style="padding:20px">No other conversations.</div>';
+        return;
+      }
+      convs.forEach(c => {
+        const el = document.createElement('div');
+        el.className = 'modal-item';
+        const segs = [c.name];
+        let f = findFolder(c.folder_id);
+        while (f) { segs.unshift(f.name); f = f.parent_id ? findFolder(f.parent_id) : null; }
+        el.innerHTML = `<div>${esc(c.name)}</div><div class="hint">/${segs.slice(0, -1).join('/')}</div>`;
+        el.addEventListener('click', async () => {
+          overlay.classList.add('hidden');
+          await moveBlockToConv(blockId, c.id);
+        });
+        results.appendChild(el);
+      });
+    }
+    input.oninput = () => render(input.value);
+    render('');
+    overlay.classList.remove('hidden');
+    setTimeout(() => input.focus(), 50);
+  }
+
+  function showFolderActions(id) {
+    const f = findFolder(id); if (!f) return;
+    showActionSheet([
+      { label: 'New conversation here', onClick: async () => {
+        const name = await prompt('Conversation name'); if (!name) return;
+        const conv = { id: uuid(), folder_id: id, name };
+        State.workspace.conversations.push(conv);
+        State.blocks[conv.id] = [];
+        State.currentConvId = conv.id;
+        renderAll();
+        await saveWorkspace(); await saveBlocks(conv.id);
+      }},
+      { label: 'New subfolder', onClick: async () => {
+        const name = await prompt('Subfolder name'); if (!name) return;
+        State.workspace.folders.push({ id: uuid(), parent_id: id, name });
+        renderAll(); await saveWorkspace();
+      }},
+      { label: 'Rename', onClick: () => renameItem('folder', id) },
+      { label: 'Delete folder (with contents)', danger: true, onClick: () => deleteFolder(id) },
+      { label: 'Cancel', cancel: true },
+    ]);
+  }
+
+  function showConvActions(id) {
+    const c = findConv(id); if (!c) return;
+    showActionSheet([
+      { label: 'Open', onClick: () => switchConversation(id) },
+      { label: 'Rename', onClick: () => renameItem('conv', id) },
+      { label: 'Export as Markdown', onClick: () => {
+        const md = conversationToMarkdown(id);
+        downloadText(`${c.name}.md`, md);
+      }},
+      { label: 'Copy as Markdown', onClick: async () => {
+        try { await navigator.clipboard.writeText(conversationToMarkdown(id)); toast('Copied'); } catch {}
+      }},
+      { label: 'Delete', danger: true, onClick: () => deleteConversation(id) },
+      { label: 'Cancel', cancel: true },
+    ]);
+  }
+
+  // ===== Composer events =====
+  function setupComposer() {
+    const input = $('#composer-input');
+    input.addEventListener('input', () => {
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 180) + 'px';
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendBlock();
+        return;
+      }
+      if (e.key === '@') {
+        // Trigger citation picker if at start or after whitespace
+        const pos = input.selectionStart;
+        const before = input.value[pos - 1];
+        if (!before || /\s/.test(before)) {
+          e.preventDefault();
+          const cursorPos = pos;
+          openCitePicker(blockId => {
+            const val = input.value;
+            input.value = val.slice(0, cursorPos) + `{{block:${blockId}}}` + val.slice(cursorPos);
+            input.focus();
+            input.setSelectionRange(cursorPos + blockId.length + 9, cursorPos + blockId.length + 9);
+            input.dispatchEvent(new Event('input'));
+          });
+        }
+      }
+    });
+    const sendBtn = $('#send-btn');
+    // Prevent the send button from stealing focus on tap — keeps the iOS keyboard open
+    const preventFocusSteal = e => { e.preventDefault(); };
+    sendBtn.addEventListener('mousedown', preventFocusSteal);
+    sendBtn.addEventListener('pointerdown', preventFocusSteal);
+    sendBtn.addEventListener('click', () => {
+      sendBlock();
+      // Belt-and-suspenders: re-focus synchronously in case focus was lost
+      input.focus();
+    });
+  }
+
+  // ===== Drag and drop =====
+  function setupDragAndDrop() {
+    const blocksContainer = $('#blocks');
+
+    blocksContainer.addEventListener('dragstart', e => {
+      const block = e.target.closest('.block');
+      if (!block || block.classList.contains('editing')) return;
+      State.draggedBlockId = block.dataset.blockId;
+      block.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', block.dataset.blockId); } catch {}
+    });
+
+    blocksContainer.addEventListener('dragend', () => {
+      document.querySelectorAll('.block.dragging').forEach(el => el.classList.remove('dragging'));
+      document.querySelectorAll('.drop-above,.drop-below').forEach(el => {
+        el.classList.remove('drop-above'); el.classList.remove('drop-below');
+      });
+      State.draggedBlockId = null;
+    });
+
+    blocksContainer.addEventListener('dragover', e => {
+      if (!State.draggedBlockId) return;
+      const block = e.target.closest('.block');
+      if (!block || block.dataset.blockId === State.draggedBlockId) return;
+      e.preventDefault();
+      document.querySelectorAll('.drop-above,.drop-below').forEach(el => {
+        el.classList.remove('drop-above'); el.classList.remove('drop-below');
+      });
+      const rect = block.getBoundingClientRect();
+      const above = e.clientY < rect.top + rect.height / 2;
+      block.classList.add(above ? 'drop-above' : 'drop-below');
+    });
+
+    blocksContainer.addEventListener('drop', e => {
+      if (!State.draggedBlockId) return;
+      e.preventDefault();
+      const block = e.target.closest('.block');
+      if (!block || block.dataset.blockId === State.draggedBlockId) return;
+      const rect = block.getBoundingClientRect();
+      const above = e.clientY < rect.top + rect.height / 2;
+      reorderBlock(State.draggedBlockId, block.dataset.blockId, above ? 'before' : 'after');
+    });
+
+    // Sidebar tree drag (reorder within tree + route blocks to conversations)
+    const tree = $('#tree');
+    tree.addEventListener('dragstart', e => {
+      const item = e.target.closest('.tree-item');
+      if (!item) return;
+      if (item.dataset.convId) State.draggedSidebarItem = { type: 'conv', id: item.dataset.convId };
+      else if (item.dataset.folderId) State.draggedSidebarItem = { type: 'folder', id: item.dataset.folderId };
+      item.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', 'sidebar'); } catch {}
+    });
+    tree.addEventListener('dragend', () => {
+      document.querySelectorAll('.tree-item.dragging,.tree-item.drop-target').forEach(el => {
+        el.classList.remove('dragging'); el.classList.remove('drop-target');
+      });
+      State.draggedSidebarItem = null;
+    });
+    tree.addEventListener('dragover', e => {
+      if (!State.draggedSidebarItem && !State.draggedBlockId) return;
+      const item = e.target.closest('.tree-item');
+      if (!item) return;
+      e.preventDefault();
+      document.querySelectorAll('.tree-item.drop-target').forEach(el => el.classList.remove('drop-target'));
+      // Block being dragged onto a conversation
+      if (State.draggedBlockId && item.dataset.convId) {
+        item.classList.add('drop-target');
+      }
+      // Sidebar item being reordered into a folder
+      else if (State.draggedSidebarItem && item.dataset.folderId) {
+        item.classList.add('drop-target');
+      }
+    });
+    tree.addEventListener('drop', e => {
+      const item = e.target.closest('.tree-item');
+      if (!item) return;
+      e.preventDefault();
+      // Route block to conversation
+      if (State.draggedBlockId && item.dataset.convId) {
+        moveBlockToConv(State.draggedBlockId, item.dataset.convId);
+        return;
+      }
+      // Move sidebar item into folder
+      if (State.draggedSidebarItem && item.dataset.folderId) {
+        const folderId = item.dataset.folderId;
+        if (State.draggedSidebarItem.type === 'conv') {
+          const c = findConv(State.draggedSidebarItem.id);
+          if (c) { c.folder_id = folderId; renderAll(); saveWorkspace(); }
+        } else {
+          const f = findFolder(State.draggedSidebarItem.id);
+          // Prevent moving folder into itself or descendant
+          if (f && f.id !== folderId) {
+            let cur = findFolder(folderId);
+            let ok = true;
+            while (cur) {
+              if (cur.id === f.id) { ok = false; break; }
+              cur = cur.parent_id ? findFolder(cur.parent_id) : null;
+            }
+            if (ok) { f.parent_id = folderId; renderAll(); saveWorkspace(); }
+          }
+        }
+      }
+    });
+  }
+
+  // ===== Event binding =====
+  function bindEvents() {
+    setupComposer();
+    setupDragAndDrop();
+
+    // Sidebar clicks
+    $('#tree').addEventListener('click', e => {
+      const actionsBtn = e.target.closest('[data-folder-actions]');
+      if (actionsBtn) { e.stopPropagation(); showFolderActions(actionsBtn.dataset.folderActions); return; }
+      const convActionsBtn = e.target.closest('[data-conv-actions]');
+      if (convActionsBtn) { e.stopPropagation(); showConvActions(convActionsBtn.dataset.convActions); return; }
+      const convItem = e.target.closest('[data-conv-id]');
+      if (convItem) { switchConversation(convItem.dataset.convId); return; }
+    });
+
+    // Block area clicks
+    $('#blocks').addEventListener('click', e => {
+      const cite = e.target.closest('[data-cite-id]');
+      if (cite) {
+        const id = cite.dataset.citeId;
+        const r = findBlockAnywhere(id);
+        if (!r) return;
+        if (r.convId !== State.currentConvId) {
+          switchConversation(r.convId).then(() => highlightBlock(id));
+        } else {
+          highlightBlock(id);
+        }
+        return;
+      }
+      const menuBtn = e.target.closest('[data-block-menu]');
+      if (menuBtn) { showBlockActions(menuBtn.dataset.blockMenu); return; }
+      const dividerEdit = e.target.closest('[data-divider-edit]');
+      if (dividerEdit) {
+        prompt('Divider label', findBlockAnywhere(dividerEdit.dataset.dividerEdit)?.block.body || '')
+          .then(val => {
+            if (val === null) return;
+            const r = findBlockAnywhere(dividerEdit.dataset.dividerEdit);
+            if (r) { r.block.body = val; renderBlocks(); saveBlocks(r.convId); }
+          });
+      }
+    });
+
+    // Block edit textarea handling
+    $('#blocks').addEventListener('keydown', e => {
+      const ta = e.target.closest('[data-edit-id]');
+      if (!ta) return;
+      if (e.key === 'Enter' && !e.shiftKey && !(e.metaKey || e.ctrlKey)) {
+        // Enter saves (multiline via shift)
+        e.preventDefault();
+        saveEditBlock(ta.dataset.editId, ta.value);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelEditBlock();
+      }
+    });
+    $('#blocks').addEventListener('input', e => {
+      const ta = e.target.closest('[data-edit-id]');
+      if (!ta) return;
+      ta.style.height = 'auto';
+      ta.style.height = ta.scrollHeight + 'px';
+    });
+    $('#blocks').addEventListener('dblclick', e => {
+      const block = e.target.closest('.block');
+      if (!block || block.classList.contains('editing')) return;
+      if (block.classList.contains('divider')) return;
+      startEditBlock(block.dataset.blockId);
+    });
+
+    // Header buttons
+    $('#menu-btn').addEventListener('click', () => {
+      $('#sidebar').classList.toggle('open');
+      $('#sidebar-overlay').classList.toggle('visible');
+    });
+    $('#sidebar-overlay').addEventListener('click', () => {
+      $('#sidebar').classList.remove('open');
+      $('#sidebar-overlay').classList.remove('visible');
+    });
+    $('#new-conv-btn').addEventListener('click', newConversation);
+    $('#new-folder-btn').addEventListener('click', newFolder);
+    $('#export-btn').addEventListener('click', exportCurrentAsMarkdown);
+    $('#copy-btn').addEventListener('click', copyCurrentAsMarkdown);
+    $('#export-all-btn').addEventListener('click', exportAllAsJson);
+
+    // Prompt modal
+    $('#prompt-ok').addEventListener('click', () => closePrompt($('#prompt-input').value.trim() || null));
+    $('#prompt-cancel').addEventListener('click', () => closePrompt(null));
+    $('#prompt-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); closePrompt($('#prompt-input').value.trim() || null); }
+      else if (e.key === 'Escape') { e.preventDefault(); closePrompt(null); }
+    });
+
+    // Picker cancel
+    $('#picker-cancel').addEventListener('click', () => $('#picker-overlay').classList.add('hidden'));
+    $('#picker-input').addEventListener('keydown', e => {
+      if (e.key === 'Escape') $('#picker-overlay').classList.add('hidden');
+    });
+
+    // Action sheet dismiss on backdrop click
+    $('#action-sheet').addEventListener('click', e => {
+      if (e.target.id === 'action-sheet') closeActionSheet();
+    });
+
+    // Escape closes overlays
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        if (!$('#action-sheet').classList.contains('hidden')) closeActionSheet();
+        if (!$('#picker-overlay').classList.contains('hidden')) $('#picker-overlay').classList.add('hidden');
+      }
+    });
+
+    // Error panel
+    const statusBar = $('#status-bar');
+    const panel = $('#error-panel');
+    statusBar.addEventListener('click', () => {
+      panel.classList.toggle('open');
+      if (panel.classList.contains('open')) {
+        ErrorLog.unreadErrors = 0;
+        updateStatusBarErrors();
+      }
+    });
+    $('#error-panel-close').addEventListener('click', e => {
+      e.stopPropagation();
+      panel.classList.remove('open');
+    });
+    $('#error-panel-clear').addEventListener('click', e => {
+      e.stopPropagation();
+      ErrorLog.entries = [];
+      ErrorLog.unreadErrors = 0;
+      renderErrorPanel();
+      updateStatusBarErrors();
+    });
+    $('#error-panel-test').addEventListener('click', e => {
+      e.stopPropagation();
+      report('error', 'Test error (from Test button)', new Error('Synthetic test error').stack);
+    });
+    $('#error-banner-dismiss').addEventListener('click', hideErrorBanner);
+  }
+
+  function highlightBlock(id) {
+    setTimeout(() => {
+      const el = document.querySelector(`[data-block-id="${id}"]`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.remove('highlight');
+      void el.offsetWidth;
+      el.classList.add('highlight');
+    }, 100);
+  }
+
+  // ===== Init =====
+  async function init() {
+    await loadWorkspace();
+    State.currentConvId = State.workspace.lastConvId
+      || State.workspace.conversations[0]?.id
+      || null;
+    if (State.currentConvId) await loadBlocks(State.currentConvId);
+    renderAll();
+    bindEvents();
+    report('info', 'App initialized', `Current conversation: ${State.currentConvId || 'none'}`);
+  }
+
+  init().catch(err => {
+    report('error', 'Failed to initialize app: ' + (err.message || err), err.stack);
+    // Also render a hard fallback so the user can see something even if the DOM is broken
+    const body = document.body;
+    if (body) {
+      const fallback = document.createElement('div');
+      fallback.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:16px;background:#991b1b;color:white;font-family:monospace;font-size:13px;z-index:10000;';
+      fallback.innerHTML = `<strong>Init failed:</strong> ${escHtml(err.message || String(err))}<br><small>${escHtml(err.stack || '')}</small>`;
+      body.appendChild(fallback);
+    }
+  });
+})();
+</script>
