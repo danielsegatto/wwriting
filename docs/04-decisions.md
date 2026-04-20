@@ -141,3 +141,16 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - The `@tailwindcss/vite` plugin must remain in `vite.config.ts`; removing it silently drops all utility styles.
 - React 19 is the current major; watch for breaking changes if upgrading minor versions.
 - Bundle size baseline: ~192 kB JS (React + ReactDOM, pre-tree-shaking of actual app code), ~8.5 kB CSS.
+
+## 017 — 2026-04-20 — Supabase as the backend
+
+**Status:** accepted.
+**Decision:** Supabase (hosted Postgres + auth + realtime) over Pocketbase.
+**Rejected:**
+- Pocketbase: rejected (human chose Supabase). Pocketbase is a single Go binary with simpler ops but a smaller JS ecosystem and no managed hosting out of the box.
+**Consequences:**
+- `@supabase/supabase-js` is a runtime dependency. It is not included in the bundle until something actually imports `src/lib/supabase.ts`.
+- All tables carry a denormalized `user_id` column so RLS policies are single-clause (`user_id = auth.uid()`). `block_tags` and `block_references` lack `user_id` and use subquery-based RLS through the parent `blocks` row.
+- DB types (`src/db/types.ts`) are hand-written for MVP speed. Regenerate with `npx supabase gen types typescript --project-id <id>` after the project is created; the hand-written file is a faithful starting point but the generated file is the authority once the project exists.
+- The migration file (`src/db/migrations/001_initial_schema.sql`) is idempotent and safe to re-run. It does not use the Supabase CLI migration system, so there is no migration tracking table. If the CLI is adopted later, this file becomes migration 0001.
+- Realtime is enabled for `folders`, `conversations`, and `blocks` via `supabase_realtime` publication. `tags`, `block_tags`, `block_references`, and `user_settings` are not in the publication; they do not require realtime in the MVP.

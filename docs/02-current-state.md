@@ -10,6 +10,9 @@
 ## Built
 
 - Project scaffold: React 19 + Vite 8 + Tailwind CSS v4. `npm run build` passes. Stack decision in `docs/04-decisions.md` §016.
+- Supabase client (`src/lib/supabase.ts`) — typed singleton using `@supabase/supabase-js`. Reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from `.env.local`; reports missing vars through the error reporter. Copy `.env.local.example` to `.env.local` and fill in values before running the app.
+- DB schema (`src/db/migrations/001_initial_schema.sql`) — all tables, indexes, `updated_at` triggers, and RLS policies matching `docs/03-data-model.md`. Run once in the Supabase SQL editor.
+- DB types (`src/db/types.ts`) — hand-written `Database` type for Supabase client inference. Regenerate with `npx supabase gen types typescript` after running migrations.
 - `src/lib/errors.ts` centralizes visible runtime reporting with `report('error' | 'warn' | 'info', ...)`, FIFO retention, subscribers for future UI, console mirroring, and one-time global `error` / `unhandledrejection` handlers. Activated at startup via `installGlobalErrorHandlers(window)` in `src/main.tsx`.
 
 ## Reference prototype
@@ -25,7 +28,7 @@ When building the real thing under `src/`:
 ## Planned — MVP
 
 - [x] Project scaffold (React 19, Vite 8, Tailwind v4 — see §016)
-- [ ] Supabase or Pocketbase setup
+- [x] Supabase setup: client in `src/lib/supabase.ts`, typed via `src/db/types.ts`, migration at `src/db/migrations/001_initial_schema.sql` (see §017)
 - [ ] Email/password auth with password reset
 - [ ] Data model (migrations for folders, conversations, blocks, tags, block_tags, block_references, user_settings)
 - [ ] Composer (send on Enter, Shift+Enter newline, type=text Blocks)
