@@ -1,14 +1,15 @@
+
 # 02 — Current State
 
 **Keep this file up to date. If you change what's built, update this file in the same commit.**
 
 ## Overall phase
 
-**Phase 0 — pre-implementation.** Design is settled; code has not yet been written in this repository. A functional prototype exists outside the repo (single-file HTML artifact) and will serve as the reference implementation for the first proper build.
+**Phase 0 — initial implementation.** Design is settled; the real application has started under `src/` with framework-neutral foundation code. A functional prototype exists outside the production source tree (single-file HTML artifact) and will serve as the reference implementation for the first proper build.
 
 ## Built
 
-_Nothing in this repository yet._
+- `src/lib/errors.ts` centralizes visible runtime reporting with `report('error' | 'warn' | 'info', ...)`, FIFO retention, subscribers for future UI, console mirroring, and one-time global `error` / `unhandledrejection` handlers.
 
 ## Reference prototype
 

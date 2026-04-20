@@ -12,6 +12,7 @@ Newest entries first. One line per change. Format:
 
 ## 2026-04-20
 
-- Add working prototype at `prototype/writing-app.html` as MVP behavioral reference. (sha pending)
-- Enable `.githooks/commit-msg` to enforce AI-context commit convention. (sha pending)
-- Initial documentation scaffold — all of `docs/`, README, CLAUDE.md. (sha pending)
+- Add framework-neutral visible error reporter under `src/lib/errors.ts`. (sha pending)
+- Add working prototype at `prototype/writing-app.html` as MVP behavioral reference. (e19947f)
+- Enable `.githooks/commit-msg` to enforce AI-context commit convention. (76735e2)
+- Initial documentation scaffold — all of `docs/`, README, CLAUDE.md. (b8e3512)
