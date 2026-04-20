@@ -10,6 +10,8 @@
 ## Built
 
 - Project scaffold: React 19 + Vite 8 + Tailwind CSS v4. `npm run build` passes. Stack decision in `docs/04-decisions.md` §016.
+- Auth gate (`src/app/AuthGate.tsx`) — session check on mount via `supabase.auth.getSession`, live updates via `onAuthStateChange`. Unauthenticated users see the `<Auth>` component (email/password + forgot-password, no OAuth). Authenticated users see the app. Loading state renders a blank dark screen (no flash of auth UI).
+- `src/lib/auth.ts` — `signOut()` helper; routes errors through the reporter.
 - Supabase client (`src/lib/supabase.ts`) — typed singleton using `@supabase/supabase-js`. Reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from `.env.local`; reports missing vars through the error reporter. Copy `.env.local.example` to `.env.local` and fill in values before running the app.
 - DB schema (`src/db/migrations/001_initial_schema.sql`) — all tables, indexes, `updated_at` triggers, and RLS policies matching `docs/03-data-model.md`. Run once in the Supabase SQL editor.
 - DB types (`src/db/types.ts`) — hand-written `Database` type for Supabase client inference. Regenerate with `npx supabase gen types typescript` after running migrations.
@@ -29,7 +31,7 @@ When building the real thing under `src/`:
 
 - [x] Project scaffold (React 19, Vite 8, Tailwind v4 — see §016)
 - [x] Supabase setup: client in `src/lib/supabase.ts`, typed via `src/db/types.ts`, migration at `src/db/migrations/001_initial_schema.sql` (see §017)
-- [ ] Email/password auth with password reset
+- [x] Auth: `@supabase/auth-ui-react` `<Auth>` component gated behind `src/app/AuthGate.tsx`; email/password + forgot-password flow; `signOut()` helper in `src/lib/auth.ts` (see §018)
 - [ ] Data model (migrations for folders, conversations, blocks, tags, block_tags, block_references, user_settings)
 - [ ] Composer (send on Enter, Shift+Enter newline, type=text Blocks)
 - [ ] Sidebar tree (folders nestable, conversations as leaves)

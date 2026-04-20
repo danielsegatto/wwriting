@@ -154,3 +154,16 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - DB types (`src/db/types.ts`) are hand-written for MVP speed. Regenerate with `npx supabase gen types typescript --project-id <id>` after the project is created; the hand-written file is a faithful starting point but the generated file is the authority once the project exists.
 - The migration file (`src/db/migrations/001_initial_schema.sql`) is idempotent and safe to re-run. It does not use the Supabase CLI migration system, so there is no migration tracking table. If the CLI is adopted later, this file becomes migration 0001.
 - Realtime is enabled for `folders`, `conversations`, and `blocks` via `supabase_realtime` publication. `tags`, `block_tags`, `block_references`, and `user_settings` are not in the publication; they do not require realtime in the MVP.
+
+## 018 — 2026-04-20 — Supabase hosted Auth UI over custom forms
+
+**Status:** accepted.
+**Decision:** Use `@supabase/auth-ui-react` (`<Auth>` component with `ThemeSupa`) rather than hand-rolling login/signup/reset forms.
+**Rejected:**
+- Custom React forms: rejected (human chose hosted UI). Would give full styling control at the cost of building and maintaining form validation, error messages, password reset flow, and PKCE handling.
+**Consequences:**
+- `@supabase/auth-ui-react` and `@supabase/auth-ui-shared` are runtime dependencies (~250 kB uncompressed, ~130 kB gzipped including Supabase SDK).
+- The `<Auth>` component is configured with `providers={[]}` (no OAuth) and `view="sign_in"` as the default. The "Forgot Password?" and "Don't have an account?" links are shown via `showLinks`.
+- Styling is driven by the `ThemeSupa` theme with `variables` overrides to match the zinc dark palette — not Tailwind utilities, since the component renders its own CSS custom properties.
+- If the auth UI needs to diverge from what `@supabase/auth-ui-react` supports, the package must be replaced with custom forms. Do not patch the package internals.
+- The loading state (session check in-flight) renders a blank dark screen to avoid flashing the auth form before redirecting an already-authenticated user.
