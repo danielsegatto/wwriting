@@ -12,7 +12,7 @@ Newest entries first. One line per change. Format:
 
 ## 2026-04-20
 
-- Add auth gate with Supabase Auth UI (`@supabase/auth-ui-react`). (sha-pending)
+- Add auth gate with Supabase Auth UI (`@supabase/auth-ui-react`). (d825d7c)
 - Add Supabase client, DB types, and initial schema migration. (ed55f6e)
 - Scaffold React 19 + Vite 8 + Tailwind CSS v4; wire error reporter into `main.tsx`. (cadcbf3)
 - Add framework-neutral visible error reporter under `src/lib/errors.ts`. (b43742b)
