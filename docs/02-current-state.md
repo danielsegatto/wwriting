@@ -9,7 +9,8 @@
 
 ## Built
 
-- `src/lib/errors.ts` centralizes visible runtime reporting with `report('error' | 'warn' | 'info', ...)`, FIFO retention, subscribers for future UI, console mirroring, and one-time global `error` / `unhandledrejection` handlers.
+- Project scaffold: React 19 + Vite 8 + Tailwind CSS v4. `npm run build` passes. Stack decision in `docs/04-decisions.md` §016.
+- `src/lib/errors.ts` centralizes visible runtime reporting with `report('error' | 'warn' | 'info', ...)`, FIFO retention, subscribers for future UI, console mirroring, and one-time global `error` / `unhandledrejection` handlers. Activated at startup via `installGlobalErrorHandlers(window)` in `src/main.tsx`.
 
 ## Reference prototype
 
@@ -23,7 +24,7 @@ When building the real thing under `src/`:
 
 ## Planned — MVP
 
-- [ ] Project scaffold (PWA, framework choice, build tooling)
+- [x] Project scaffold (React 19, Vite 8, Tailwind v4 — see §016)
 - [ ] Supabase or Pocketbase setup
 - [ ] Email/password auth with password reset
 - [ ] Data model (migrations for folders, conversations, blocks, tags, block_tags, block_references, user_settings)

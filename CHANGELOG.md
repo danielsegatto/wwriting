@@ -12,6 +12,7 @@ Newest entries first. One line per change. Format:
 
 ## 2026-04-20
 
+- Scaffold React 19 + Vite 8 + Tailwind CSS v4; wire error reporter into `main.tsx`. (sha-pending)
 - Add framework-neutral visible error reporter under `src/lib/errors.ts`. (b43742b)
 - Add working prototype at `prototype/writing-app.html` as MVP behavioral reference. (e19947f)
 - Enable `.githooks/commit-msg` to enforce AI-context commit convention. (76735e2)

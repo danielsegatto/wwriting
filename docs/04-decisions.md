@@ -126,3 +126,18 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - The CHANGELOG remains the one-line high-level view; commit bodies are the detailed view. They complement, not duplicate.
 - When a commit body would contradict a doc, the doc is updated in the same commit and the body notes the divergence. Commits and docs must not drift apart.
 - Because commit history is append-only (no rewriting published history), the investment compounds. Every load-bearing commit adds to the corpus of context future sessions can draw on.
+
+## 016 — 2026-04-20 — React + Vite + Tailwind v4 as the frontend stack
+
+**Status:** accepted.
+**Decision:** React 19 with TypeScript strict mode, Vite 8 as the build tool, Tailwind CSS v4 (CSS-first, `@tailwindcss/vite` plugin — no `tailwind.config.js`).
+**Rejected:**
+- Svelte: rejected (human chose React).
+- Solid: rejected (human chose React).
+- Tailwind v3: rejected in favour of v4 (human chose v4; v4's CSS-first config is simpler and integrates cleanly with the Vite plugin).
+- webpack / other bundlers: Vite is the obvious choice for a Vite-era React project; no serious alternative was considered.
+**Consequences:**
+- Tailwind v4 uses `@import "tailwindcss"` in the CSS entrypoint rather than a JS config file. Utility classes are available everywhere without additional configuration.
+- The `@tailwindcss/vite` plugin must remain in `vite.config.ts`; removing it silently drops all utility styles.
+- React 19 is the current major; watch for breaking changes if upgrading minor versions.
+- Bundle size baseline: ~192 kB JS (React + ReactDOM, pre-tree-shaking of actual app code), ~8.5 kB CSS.
