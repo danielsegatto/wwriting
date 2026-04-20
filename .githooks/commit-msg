@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# .githooks/commit-msg
+#
+# Enforces the "commits as AI context" convention from
+# docs/05-conventions.md §Git conventions and docs/04-decisions.md §015.
+#
+# Rules:
+#   - Subject line must exist and be <= 72 chars.
+#   - Non-trivial commits (more than ~10 lines changed) must have a body.
+#   - Merge commits and revert commits are exempt.
+#
+# To enable this hook in a fresh clone, run once:
+#   git config core.hooksPath .githooks
+#
+# To intentionally bypass (rare, e.g. mid-rebase housekeeping):
+#   git commit --no-verify ...
+
+set -euo pipefail
+
+msg_file="$1"
+msg="$(cat "$msg_file")"
+
+# Strip comment lines (lines starting with #) that git adds to the template.
+clean_msg="$(printf '%s\n' "$msg" | sed '/^#/d')"
+
+# First non-empty line is the subject.
+subject="$(printf '%s\n' "$clean_msg" | sed -n '1{/./p;}; 1!{/./{p;q}}' | head -n1)"
+
+if [ -z "$subject" ]; then
+  echo "commit-msg: empty commit message rejected." >&2
+  exit 1
+fi
+
+# Exempt merge and revert commits from the body requirement.
+case "$subject" in
+  "Merge "*|"Revert "*) exit 0 ;;
+esac
+
+# Check subject length.
+if [ "${#subject}" -gt 72 ]; then
+  echo "commit-msg: subject line is ${#subject} chars; max is 72." >&2
+  echo "  subject: $subject" >&2
+  exit 1
+fi
+
+# Gauge commit size. Compare against the staged diff (pre-commit state).
+# If no staged changes are detectable (e.g. during rebase), skip the size check.
+if git diff --cached --quiet 2>/dev/null; then
+  changed_lines=0
+else
+  changed_lines="$(git diff --cached --numstat 2>/dev/null \
+    | awk '{ a += $1; d += $2 } END { print (a + d) + 0 }')"
+fi
+
+# Threshold for "trivial": 10 lines of diff or fewer can ship with subject only.
+threshold=10
+
+# Body = everything after the subject and a blank line.
+body="$(printf '%s\n' "$clean_msg" | awk 'NR>2' | sed '/^\s*$/d')"
+
+if [ "$changed_lines" -gt "$threshold" ] && [ -z "$body" ]; then
+  cat >&2 <<EOF
+commit-msg: commit changes $changed_lines lines but has no body.
+
+This repo treats commit messages as durable context for future AI
+sessions. Non-trivial commits must include a body that explains:
+
+  Why: the motivating problem or goal.
+  Approach: the shape of the solution (when non-obvious).
+  Alternatives considered: what you tried or ruled out.
+  Follow-ups: what this enables, blocks, or defers.
+  Watch out for: non-obvious gotchas (when any).
+
+See docs/05-conventions.md §Git conventions.
+
+To bypass (rare): git commit --no-verify ...
+EOF
+  exit 1
+fi
+
+exit 0
