@@ -56,6 +56,7 @@ type DragState = {
   activeBlockId: string
   conversationId: string
   previewBlocks: Block[]
+  ghostLabel: string
 } | null
 type OptimisticOrderState = {
   conversationId: string
@@ -744,7 +745,9 @@ export function BlockFeed({
     activeBlockId: string
     pointerId: number
     previewBlocks: Block[]
+    ghostLabel: string
   } | null>(null)
+  const blockGhostRef = useRef<HTMLDivElement>(null)
   const [availableTags, setAvailableTags] = useState<Tag[]>([])
   const [folders, setFolders] = useState<Folder[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -1081,16 +1084,22 @@ export function BlockFeed({
 
     const previewBlocks =
       optimisticOrder?.conversationId === conversationId ? optimisticOrder.blocks : blocksRef.current
+    const ghostLabel = block.type === 'divider'
+      ? '———'
+      : (block.body ?? '').replace(/\s+/g, ' ').trim().slice(0, 80)
     dragSessionRef.current = {
       activeBlockId: block.id,
       pointerId: event.pointerId,
       previewBlocks,
+      ghostLabel,
     }
     setDragState({
       activeBlockId: block.id,
       conversationId,
       previewBlocks,
+      ghostLabel,
     })
+    if (blockGhostRef.current) blockGhostRef.current.style.top = `${event.clientY - 20}px`
   }
 
   function handleDragHandlePointerMove(event: React.PointerEvent<HTMLButtonElement>) {
@@ -1098,6 +1107,8 @@ export function BlockFeed({
     if (!session || session.pointerId !== event.pointerId) return
 
     event.preventDefault()
+    if (blockGhostRef.current) blockGhostRef.current.style.top = `${event.clientY - 20}px`
+
     const nextPreviewBlocks = moveBlockToIndex(
       session.previewBlocks,
       session.activeBlockId,
@@ -1111,6 +1122,7 @@ export function BlockFeed({
       activeBlockId: session.activeBlockId,
       conversationId,
       previewBlocks: nextPreviewBlocks,
+      ghostLabel: session.ghostLabel,
     })
   }
 
@@ -1128,6 +1140,7 @@ export function BlockFeed({
       optimisticOrder?.conversationId === conversationId ? optimisticOrder.blocks : blocksRef.current
 
     setDragState(null)
+    if (blockGhostRef.current) blockGhostRef.current.style.top = '-9999px'
 
     if (haveSameBlockOrder(nextPreviewBlocks, currentBlocks)) return
 
@@ -1378,6 +1391,14 @@ export function BlockFeed({
   }
 
   return (
+    <>
+    <div
+      ref={blockGhostRef}
+      className="pointer-events-none fixed z-50 rounded-xl border border-zinc-600 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-200 shadow-2xl shadow-black/70 truncate"
+      style={{ top: -9999, left: '50%', transform: 'translateX(-50%)', width: 'min(600px, calc(100vw - 32px))' }}
+    >
+      {dragState?.ghostLabel}
+    </div>
     <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
       <div ref={listRef} className="mx-auto max-w-2xl space-y-3">
         {selectedBlocks.length > 0 && (
@@ -1587,6 +1608,7 @@ export function BlockFeed({
         <div ref={bottomRef} />
       </div>
     </div>
+    </>
   )
 }
 

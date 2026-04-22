@@ -12,8 +12,8 @@ type CreatingState =
   | null
 
 type DragState =
-  | { kind: 'folder'; activeId: string; preview: Folder[] }
-  | { kind: 'conversation'; activeId: string; scopeFolderId: string; preview: Conversation[] }
+  | { kind: 'folder'; activeId: string; preview: Folder[]; ghostLabel: string }
+  | { kind: 'conversation'; activeId: string; scopeFolderId: string; preview: Conversation[]; ghostLabel: string }
   | null
 
 type DragSession = {
@@ -46,6 +46,7 @@ export function Sidebar({
   const [dragState, setDragState] = useState<DragState>(null)
   const dragSessionRef = useRef<DragSession | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const ghostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     Promise.all([listFolders(userId), listConversations(userId)]).then(
@@ -220,6 +221,8 @@ export function Sidebar({
   }, [folders, conversations, selectedConversationId, onConversationDeleted])
 
   // --- Drag handlers ---
+  // Pointer capture goes on listRef so it stays mounted when isDragging
+  // collapses the row to a 2px line (unmounting the grip button).
 
   const handleFolderDragStart = useCallback((
     folderId: string,
@@ -227,8 +230,9 @@ export function Sidebar({
   ) => {
     event.preventDefault()
     event.stopPropagation()
-    event.currentTarget.setPointerCapture(event.pointerId)
+    listRef.current?.setPointerCapture(event.pointerId)
     const preview = folders
+    const ghostLabel = folders.find((f) => f.id === folderId)?.name ?? folderId
     dragSessionRef.current = {
       pointerId: event.pointerId,
       activeId: folderId,
@@ -236,7 +240,8 @@ export function Sidebar({
       scopeFolderId: null,
       preview,
     }
-    setDragState({ kind: 'folder', activeId: folderId, preview })
+    setDragState({ kind: 'folder', activeId: folderId, preview, ghostLabel })
+    if (ghostRef.current) ghostRef.current.style.top = `${event.clientY - 14}px`
   }, [folders])
 
   const handleConversationDragStart = useCallback((
@@ -246,8 +251,9 @@ export function Sidebar({
   ) => {
     event.preventDefault()
     event.stopPropagation()
-    event.currentTarget.setPointerCapture(event.pointerId)
+    listRef.current?.setPointerCapture(event.pointerId)
     const preview = conversations.filter((c) => c.folder_id === folderId)
+    const ghostLabel = conversations.find((c) => c.id === convId)?.name ?? convId
     dragSessionRef.current = {
       pointerId: event.pointerId,
       activeId: convId,
@@ -255,13 +261,16 @@ export function Sidebar({
       scopeFolderId: folderId,
       preview,
     }
-    setDragState({ kind: 'conversation', activeId: convId, scopeFolderId: folderId, preview })
+    setDragState({ kind: 'conversation', activeId: convId, scopeFolderId: folderId, preview, ghostLabel })
+    if (ghostRef.current) ghostRef.current.style.top = `${event.clientY - 14}px`
   }, [conversations])
 
-  const handleDragPointerMove = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+  const handleDragPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const session = dragSessionRef.current
     if (!session || session.pointerId !== event.pointerId || !listRef.current) return
     event.preventDefault()
+
+    if (ghostRef.current) ghostRef.current.style.top = `${event.clientY - 14}px`
 
     let next: Folder[] | Conversation[]
     if (session.kind === 'folder') {
@@ -287,15 +296,13 @@ export function Sidebar({
     })
   }, [])
 
-  const finishDrag = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+  const finishDrag = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const session = dragSessionRef.current
     if (!session || session.pointerId !== event.pointerId) return
     dragSessionRef.current = null
 
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-
+    listRef.current?.releasePointerCapture(session.pointerId)
+    if (ghostRef.current) ghostRef.current.style.top = '-9999px'
     setDragState(null)
 
     if (session.kind === 'folder') {
@@ -330,6 +337,15 @@ export function Sidebar({
 
   return (
     <div className="flex h-full min-h-0 w-56 flex-shrink-0 flex-col border-r border-zinc-800 bg-zinc-900">
+      {/* Floating drag ghost — position updated imperatively to avoid re-render on every move */}
+      <div
+        ref={ghostRef}
+        className="pointer-events-none fixed left-1 z-50 flex w-52 items-center gap-1.5 rounded-lg border border-zinc-600 bg-zinc-800 px-2 py-1.5 text-sm font-medium text-zinc-100 shadow-2xl shadow-black/70"
+        style={{ top: -9999 }}
+      >
+        <GripIcon />
+        <span className="truncate">{dragState?.ghostLabel}</span>
+      </div>
       <div className="flex items-center justify-between px-3 py-3">
         <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
           Conversations
@@ -351,7 +367,14 @@ export function Sidebar({
           </button>
         </div>
       </div>
-      <div ref={listRef} className="flex-1 overflow-y-auto px-1 pb-4">
+      <div
+        ref={listRef}
+        className="flex-1 overflow-y-auto px-1 pb-4"
+        onPointerMove={handleDragPointerMove}
+        onPointerUp={finishDrag}
+        onPointerCancel={finishDrag}
+        onLostPointerCapture={finishDrag}
+      >
         {displayFolders.length === 0 && creating?.type !== 'folder' ? (
           <p className="px-3 py-2 text-xs text-zinc-600">No conversations yet.</p>
         ) : (
@@ -373,8 +396,6 @@ export function Sidebar({
               isDragging={dragState?.kind === 'folder' && dragState.activeId === folder.id}
               onFolderDragStart={handleFolderDragStart}
               onConversationDragStart={handleConversationDragStart}
-              onDragPointerMove={handleDragPointerMove}
-              onDragEnd={finishDrag}
               draggingConversationId={dragState?.kind === 'conversation' ? dragState.activeId : null}
             />
           ))
@@ -407,8 +428,6 @@ type FolderRowProps = {
   isDragging: boolean
   onFolderDragStart: (folderId: string, event: React.PointerEvent<HTMLButtonElement>) => void
   onConversationDragStart: (convId: string, folderId: string, event: React.PointerEvent<HTMLButtonElement>) => void
-  onDragPointerMove: (event: React.PointerEvent<HTMLButtonElement>) => void
-  onDragEnd: (event: React.PointerEvent<HTMLButtonElement>) => void
   draggingConversationId: string | null
 }
 
@@ -428,8 +447,6 @@ function FolderRow({
   isDragging,
   onFolderDragStart,
   onConversationDragStart,
-  onDragPointerMove,
-  onDragEnd,
   draggingConversationId,
 }: FolderRowProps) {
   if (isDragging) {
@@ -447,10 +464,6 @@ function FolderRow({
           className="touch-none cursor-grab px-1 py-1.5 text-zinc-600 hover:text-zinc-400 active:cursor-grabbing"
           title="Drag to reorder"
           onPointerDown={(e) => onFolderDragStart(folder.id, e)}
-          onPointerMove={onDragPointerMove}
-          onPointerUp={onDragEnd}
-          onPointerCancel={onDragEnd}
-          onLostPointerCapture={onDragEnd}
         >
           <GripIcon />
         </button>
@@ -489,8 +502,6 @@ function FolderRow({
             onDelete={onDeleteConversation}
             isDragging={draggingConversationId === conv.id}
             onConversationDragStart={onConversationDragStart}
-            onDragPointerMove={onDragPointerMove}
-            onDragEnd={onDragEnd}
           />
         ))}
       {!collapsed && creatingConversation && (
@@ -513,8 +524,6 @@ function ConversationRow({
   onDelete,
   isDragging,
   onConversationDragStart,
-  onDragPointerMove,
-  onDragEnd,
 }: {
   conversation: Conversation
   folderId: string
@@ -523,8 +532,6 @@ function ConversationRow({
   onDelete: (id: string) => void
   isDragging: boolean
   onConversationDragStart: (convId: string, folderId: string, event: React.PointerEvent<HTMLButtonElement>) => void
-  onDragPointerMove: (event: React.PointerEvent<HTMLButtonElement>) => void
-  onDragEnd: (event: React.PointerEvent<HTMLButtonElement>) => void
 }) {
   if (isDragging) {
     return (
@@ -548,10 +555,6 @@ function ConversationRow({
         className="touch-none cursor-grab px-1 text-zinc-600 hover:text-zinc-400 active:cursor-grabbing"
         title="Drag to reorder"
         onPointerDown={(e) => onConversationDragStart(conversation.id, folderId, e)}
-        onPointerMove={onDragPointerMove}
-        onPointerUp={onDragEnd}
-        onPointerCancel={onDragEnd}
-        onLostPointerCapture={onDragEnd}
       >
         <GripIcon />
       </button>
