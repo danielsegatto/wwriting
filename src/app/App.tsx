@@ -4,6 +4,7 @@ import { AuthGate } from './AuthGate.tsx'
 import { Composer } from '../components/composer/Composer.tsx'
 import { BlockFeed } from '../components/feed/BlockFeed.tsx'
 import { Sidebar } from '../components/sidebar/Sidebar.tsx'
+import { ErrorConsole } from '../components/system/ErrorConsole.tsx'
 import { highlightDurationMs } from '../lib/constants.ts'
 import { ensureDefaultConversation, getConversation } from '../lib/conversations.ts'
 import { createAppendPosition, createBlock, listBlocks } from '../lib/blocks.ts'
@@ -587,6 +588,7 @@ function AppShell({ session }: { session: Session }) {
         ) : (
           <div className="flex flex-1 items-center justify-center" />
         )}
+        <ErrorConsole />
       </div>
     </div>
   )

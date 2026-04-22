@@ -320,3 +320,16 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - `src/app/App.tsx` owns the send retry loop and the swap from `local:<uuid>` temporary IDs to real database IDs, rather than leaving send persistence inside the Composer.
 - `src/components/feed/BlockFeed.tsx` must ignore non-synced Blocks when loading tag metadata and citation targets, because those helpers depend on persisted Block IDs.
 - The current optimistic scope covers send only. Edit remains server-round-trip-first even though §013 mentions send/edit; if optimistic edit is added later, it should build on the same client-only status model instead of inventing a second one.
+
+## 029 — 2026-04-22 — Error UI ships as banner plus bottom status strip with expandable log
+
+**Status:** accepted.
+**Decision:** The visible error-reporting UI lives in a dedicated `ErrorConsole` component mounted in `AppShell`. It always renders a bottom status strip as the permanent event-log affordance, expands into a scrollable console panel on demand, and shows a top in-shell banner only for unread `error` entries. Opening the log marks current entries read; warnings and info entries remain visible in the log without triggering the top banner.
+**Rejected:**
+- Keeping the reporter headless until a later polish pass: rejected because §014 makes visible error handling a current functional requirement, not future chrome.
+- A modal-only log viewer: rejected because it hides the state of the system until the user intentionally opens a separate layer and weakens the "always visible" affordance required by §014.
+- Bannering warnings and info events the same way as errors: rejected because it would turn normal operational chatter into constant interruption and make real failures easier to ignore.
+**Consequences:**
+- `src/components/system/ErrorConsole.tsx` owns the reporter subscription, unread/read transitions, detail formatting, and clear-log controls; `src/app/App.tsx` only mounts it.
+- The app now has three distinct severity surfaces: unread errors appear in the top banner, all severities contribute to the bottom status strip counts, and full details live in the expandable event log.
+- The reporter store remains in-memory only. Reloading the page clears read state and prior entries; persistent diagnostics remain a possible later follow-up, not part of this slice.
