@@ -12,6 +12,8 @@ Newest entries first. One line per change. Format:
 
 ## 2026-04-22
 
+- Fix citation picker trigger so `@` opens in the composer and inline block editing, including edit-mode citation insertion.
+- Add end-to-end citations: `@` composer picker, `block_references` reconciliation on create/edit, rendered citation pills with cross-conversation jump + highlight, and unit tests for `src/lib/references.ts` / `src/lib/markdown.ts`.
 - Add block action menus with inline text-block editing, block move picker, delete confirmation, and shared inline-tag reconciliation helpers in `src/lib/blocks.ts` / `src/lib/tags.ts`.
 - Add block-level tag picker with picker-only tag removal and mobile-safe picker positioning in BlockFeed; extend `src/lib/tags.ts` with tag listing and per-block tag aggregation helpers.
 - Add inline Create Folder / Create Conversation to sidebar: "+" in header creates a folder; "+" on hover per folder creates a conversation; inline input with Enter/Escape/blur handling; auto-navigate on creation. (cba8976)

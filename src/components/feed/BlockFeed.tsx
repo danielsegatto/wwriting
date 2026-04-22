@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { marked } from 'marked'
 import {
   createAppendPosition,
   deleteBlock,
@@ -7,10 +6,21 @@ import {
   updateBlock,
 } from '../../lib/blocks.ts'
 import type { Block } from '../../lib/blocks.ts'
+import {
+  blockPreviewCollapseThreshold,
+  citationPickerPreviewLength,
+} from '../../lib/constants.ts'
 import { listConversations } from '../../lib/conversations.ts'
 import type { Conversation } from '../../lib/conversations.ts'
 import { listFolders } from '../../lib/folders.ts'
 import type { Folder } from '../../lib/folders.ts'
+import { renderMarkdown } from '../../lib/markdown.ts'
+import {
+  searchCitationCandidates,
+  loadCitationTargetsForBlocks,
+  reconcileBlockReferences,
+} from '../../lib/references.ts'
+import type { CitationCandidate, CitationTarget } from '../../lib/references.ts'
 import {
   attachPickerTagToBlock,
   findOrCreateTag,
@@ -27,22 +37,64 @@ type Props = {
   blocks: Block[]
   userId: string
   conversationId: string
+  highlightedBlockId: string | null
+  highlightedBlockVersion: number
   onBlockUpdated: (block: Block) => void
   onBlockRemoved: (blockId: string) => void
+  onJumpToBlock: (target: CitationTarget) => void
 }
 
 type ActionMode = 'menu' | 'edit' | 'move' | 'delete'
 type ActionState = { blockId: string; mode: ActionMode } | null
 type BusyState = { blockId: string; kind: 'tag' | 'edit' | 'move' | 'delete' } | null
-
-marked.setOptions({ gfm: true, breaks: true })
+type EditCitationPickerState = { blockId: string; insertionIndex: number } | null
 
 const pickerTagSource = 'picker' as const
 const maxTagSuggestions = 8
 const longPressMs = 450
 
-function renderMarkdown(src: string): string {
-  return marked.parse(src) as string
+function normalizePreviewBody(body: string): string {
+  return body.replace(/\s+/g, ' ').trim()
+}
+
+function CitationCandidateRow({
+  candidate,
+  onSelect,
+}: {
+  candidate: CitationCandidate
+  onSelect: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const normalizedBody = normalizePreviewBody(candidate.body)
+  const isLongBody = normalizedBody.length > blockPreviewCollapseThreshold
+  const visibleBody =
+    isLongBody && !expanded
+      ? `${normalizedBody.slice(0, citationPickerPreviewLength).trimEnd()}…`
+      : normalizedBody || '[empty]'
+
+  return (
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 px-3 py-3 hover:border-zinc-700 hover:bg-zinc-950">
+      <button type="button" onClick={onSelect} className="w-full text-left">
+        <p className="text-sm leading-6 text-zinc-100">{visibleBody}</p>
+        <p className="mt-2 text-xs uppercase tracking-[0.2em] text-zinc-500">
+          {candidate.conversationName}
+        </p>
+      </button>
+      {isLongBody && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            setExpanded((current) => !current)
+          }}
+          className="mt-2 text-xs font-medium text-blue-300 hover:text-blue-200"
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </div>
+  )
 }
 
 function normalizeTagQuery(value: string): string {
@@ -58,11 +110,18 @@ function BlockItem({
   tags,
   folders,
   conversations,
+  citationTargetsById,
+  highlighted,
   actionMode,
   isPickerOpen,
+  isEditCitationPickerOpen,
   pickerQuery,
   pickerBusy,
   editValue,
+  editCitationQuery,
+  editCitationBusy,
+  editCitationCandidates,
+  editCursorPosition,
   blockBusy,
   suggestions,
   canCreateTag,
@@ -74,22 +133,35 @@ function BlockItem({
   onAddTag,
   onRemovePickerTag,
   onStartEdit,
+  onOpenEditCitationPicker,
+  onCloseEditCitationPicker,
+  onEditCitationQueryChange,
+  onInsertEditCitation,
+  onEditCursorApplied,
   onEditValueChange,
   onSaveEdit,
   onStartMove,
   onMoveToConversation,
   onStartDelete,
   onConfirmDelete,
+  onJumpToBlock,
 }: {
   block: Block
   tags: AppliedTag[]
   folders: Folder[]
   conversations: Conversation[]
+  citationTargetsById: Record<string, CitationTarget>
+  highlighted: boolean
   actionMode: ActionMode | null
   isPickerOpen: boolean
+  isEditCitationPickerOpen: boolean
   pickerQuery: string
   pickerBusy: boolean
   editValue: string
+  editCitationQuery: string
+  editCitationBusy: boolean
+  editCitationCandidates: CitationCandidate[]
+  editCursorPosition: number | null
   blockBusy: 'tag' | 'edit' | 'move' | 'delete' | null
   suggestions: Tag[]
   canCreateTag: boolean
@@ -101,19 +173,30 @@ function BlockItem({
   onAddTag: (name: string) => void
   onRemovePickerTag: (tagId: string) => void
   onStartEdit: () => void
+  onOpenEditCitationPicker: (insertionIndex: number) => void
+  onCloseEditCitationPicker: () => void
+  onEditCitationQueryChange: (value: string) => void
+  onInsertEditCitation: (candidate: CitationCandidate) => void
+  onEditCursorApplied: () => void
   onEditValueChange: (value: string) => void
   onSaveEdit: () => void
   onStartMove: () => void
   onMoveToConversation: (conversationId: string) => void
   onStartDelete: () => void
   onConfirmDelete: () => void
+  onJumpToBlock: (target: CitationTarget) => void
 }) {
   const itemRef = useRef<HTMLDivElement>(null)
-  const pickerRef = useRef<HTMLDivElement>(null)
   const longPressTimerRef = useRef<number | null>(null)
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
-    const overlayOpen = isPickerOpen || actionMode === 'menu' || actionMode === 'move' || actionMode === 'delete'
+    const overlayOpen =
+      isPickerOpen ||
+      isEditCitationPickerOpen ||
+      actionMode === 'menu' ||
+      actionMode === 'move' ||
+      actionMode === 'delete'
     if (!overlayOpen) return
 
     function handlePointerDown(event: MouseEvent) {
@@ -121,13 +204,19 @@ function BlockItem({
       if (!(target instanceof Node)) return
       if (itemRef.current?.contains(target)) return
       onClosePicker()
-      onCloseAction()
+      onCloseEditCitationPicker()
+      if (actionMode !== 'edit') {
+        onCloseAction()
+      }
     }
 
     function handleEscape(event: KeyboardEvent) {
       if (event.key !== 'Escape') return
       onClosePicker()
-      onCloseAction()
+      onCloseEditCitationPicker()
+      if (actionMode !== 'edit') {
+        onCloseAction()
+      }
     }
 
     document.addEventListener('mousedown', handlePointerDown)
@@ -137,7 +226,14 @@ function BlockItem({
       document.removeEventListener('mousedown', handlePointerDown)
       document.removeEventListener('keydown', handleEscape)
     }
-  }, [actionMode, isPickerOpen, onCloseAction, onClosePicker])
+  }, [
+    actionMode,
+    isEditCitationPickerOpen,
+    isPickerOpen,
+    onCloseAction,
+    onCloseEditCitationPicker,
+    onClosePicker,
+  ])
 
   useEffect(() => {
     return () => {
@@ -147,9 +243,23 @@ function BlockItem({
     }
   }, [])
 
-  const otherConversations = conversations.filter((conversation) => conversation.id !== block.conversation_id)
+  useEffect(() => {
+    if (actionMode !== 'edit' || editCursorPosition === null) return
+
+    const textarea = editTextareaRef.current
+    if (!textarea) return
+
+    textarea.focus()
+    textarea.setSelectionRange(editCursorPosition, editCursorPosition)
+    onEditCursorApplied()
+  }, [actionMode, editCursorPosition, onEditCursorApplied])
+
+  const otherConversations = conversations.filter(
+    (conversation) => conversation.id !== block.conversation_id,
+  )
   const trimmedEditValue = editValue.trim()
   const canSaveEdit = trimmedEditValue !== '' && trimmedEditValue !== (block.body ?? '')
+  const renderedBody = renderMarkdown(block.body ?? '', citationTargetsById)
 
   function clearLongPressTimer() {
     if (longPressTimerRef.current === null) return
@@ -177,15 +287,36 @@ function BlockItem({
     onOpenActionMenu()
   }
 
+  function handleBodyClick(event: React.MouseEvent<HTMLDivElement>) {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+
+    const citationButton = target.closest<HTMLElement>('[data-citation-target-id]')
+    const targetId = citationButton?.dataset.citationTargetId
+    if (!targetId) return
+
+    const citationTarget = citationTargetsById[targetId]
+    if (!citationTarget || citationTarget.deleted || !citationTarget.conversationId) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    onJumpToBlock(citationTarget)
+  }
+
   return (
     <div
       ref={itemRef}
+      data-block-id={block.id}
       onDoubleClick={handleDoubleClick}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
       onPointerCancel={handlePointerUp}
-      className="relative rounded-2xl border border-zinc-800 bg-zinc-900/70 px-4 py-3"
+      className={`relative scroll-mt-24 rounded-2xl border px-4 py-3 transition ${
+        highlighted
+          ? 'border-blue-700 bg-blue-950/25 ring-1 ring-blue-500/80'
+          : 'border-zinc-800 bg-zinc-900/70'
+      }`}
     >
       <div className="absolute right-3 top-3 flex items-center gap-2">
         {blockBusy && (
@@ -206,9 +337,7 @@ function BlockItem({
 
       {actionMode === 'menu' && (
         <div className="absolute right-3 top-14 z-20 w-40 rounded-2xl border border-zinc-700 bg-zinc-900 p-1.5 shadow-2xl shadow-black/40">
-          {block.type === 'text' && (
-            <ActionMenuButton label="Edit block" onClick={onStartEdit} />
-          )}
+          {block.type === 'text' && <ActionMenuButton label="Edit block" onClick={onStartEdit} />}
           <ActionMenuButton label="Move block" onClick={onStartMove} />
           <ActionMenuButton label="Delete block" destructive onClick={onStartDelete} />
         </div>
@@ -296,6 +425,7 @@ function BlockItem({
       ) : actionMode === 'edit' ? (
         <div className="pr-14">
           <textarea
+            ref={editTextareaRef}
             autoFocus
             value={editValue}
             onChange={(event) => onEditValueChange(event.target.value)}
@@ -308,10 +438,78 @@ function BlockItem({
                 event.preventDefault()
                 if (canSaveEdit) onSaveEdit()
               }
+
+              if (
+                event.key === '@' &&
+                !event.altKey &&
+                !event.ctrlKey &&
+                !event.metaKey
+              ) {
+                const cursorPosition = event.currentTarget.selectionStart
+                const previousCharacter = cursorPosition > 0 ? editValue[cursorPosition - 1] : ''
+
+                if (cursorPosition === 0 || /\s/.test(previousCharacter)) {
+                  event.preventDefault()
+                  onOpenEditCitationPicker(cursorPosition)
+                }
+              }
             }}
             rows={4}
             className="w-full resize-y rounded-2xl border border-zinc-700 bg-zinc-950 px-3 py-3 text-sm text-zinc-100 outline-none focus:border-blue-500"
           />
+          {isEditCitationPickerOpen && (
+            <div className="mt-3 rounded-3xl border border-zinc-700 bg-zinc-900 p-3 shadow-2xl shadow-black/40">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-zinc-100">Cite a Block</p>
+                <button
+                  type="button"
+                  onClick={onCloseEditCitationPicker}
+                  className="rounded-full p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+                  aria-label="Close citation picker"
+                >
+                  <CloseIcon />
+                </button>
+              </div>
+              <input
+                autoFocus
+                value={editCitationQuery}
+                onChange={(event) => onEditCitationQueryChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault()
+                    onCloseEditCitationPicker()
+                    return
+                  }
+
+                  if (event.key === 'Enter' && editCitationCandidates.length > 0) {
+                    event.preventDefault()
+                    onInsertEditCitation(editCitationCandidates[0])
+                  }
+                }}
+                placeholder="Search blocks by text"
+                className="mt-3 w-full rounded-2xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-blue-500"
+              />
+              <div className="mt-3 max-h-80 space-y-2 overflow-y-auto">
+                {editCitationCandidates.map((candidate) => (
+                  <CitationCandidateRow
+                    key={candidate.id}
+                    candidate={candidate}
+                    onSelect={() => onInsertEditCitation(candidate)}
+                  />
+                ))}
+                {!editCitationBusy && editCitationCandidates.length === 0 && (
+                  <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 px-3 py-4 text-sm text-zinc-500">
+                    No text Blocks found.
+                  </div>
+                )}
+              </div>
+              {editCitationBusy && (
+                <p className="mt-3 text-xs uppercase tracking-[0.2em] text-zinc-500">
+                  Loading Blocks…
+                </p>
+              )}
+            </div>
+          )}
           <div className="mt-3 flex items-center justify-end gap-2">
             <button
               type="button"
@@ -333,8 +531,9 @@ function BlockItem({
       ) : (
         <>
           <div
+            onClick={handleBodyClick}
             className="pr-14 prose prose-invert prose-sm max-w-none text-zinc-100 [&_a]:text-blue-400 [&_code]:text-zinc-300 [&_pre]:bg-zinc-800"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(block.body ?? '') }}
+            dangerouslySetInnerHTML={{ __html: renderedBody }}
           />
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {tags.map((tag) => {
@@ -369,10 +568,7 @@ function BlockItem({
                 + Tag
               </button>
               {isPickerOpen && (
-                <div
-                  ref={pickerRef}
-                  className="absolute left-0 top-[calc(100%+0.5rem)] z-10 w-[min(16rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] rounded-2xl border border-zinc-700 bg-zinc-900 p-3 shadow-2xl shadow-black/40 sm:left-auto sm:right-0"
-                >
+                <div className="absolute left-0 top-[calc(100%+0.5rem)] z-10 w-[min(16rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] rounded-2xl border border-zinc-700 bg-zinc-900 p-3 shadow-2xl shadow-black/40 sm:left-auto sm:right-0">
                   <input
                     autoFocus
                     value={pickerQuery}
@@ -411,7 +607,9 @@ function BlockItem({
                         className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-800"
                       >
                         <span>Create #{normalizeTagQuery(pickerQuery)}</span>
-                        <span className="text-[11px] uppercase tracking-wide text-zinc-500">New</span>
+                        <span className="text-[11px] uppercase tracking-wide text-zinc-500">
+                          New
+                        </span>
                       </button>
                     )}
                     {!canCreateTag && suggestions.length === 0 && (
@@ -420,9 +618,7 @@ function BlockItem({
                       </div>
                     )}
                   </div>
-                  {pickerBusy && (
-                    <p className="mt-2 text-xs text-zinc-500">Updating tags…</p>
-                  )}
+                  {pickerBusy && <p className="mt-2 text-xs text-zinc-500">Updating tags…</p>}
                 </div>
               )}
             </div>
@@ -437,8 +633,11 @@ export function BlockFeed({
   blocks,
   userId,
   conversationId,
+  highlightedBlockId,
+  highlightedBlockVersion,
   onBlockUpdated,
   onBlockRemoved,
+  onJumpToBlock,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const prevLenRef = useRef(blocks.length)
@@ -446,8 +645,17 @@ export function BlockFeed({
   const [folders, setFolders] = useState<Folder[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [tagsByBlockId, setTagsByBlockId] = useState<Record<string, AppliedTag[]>>({})
+  const [citationTargetsById, setCitationTargetsById] = useState<Record<string, CitationTarget>>({})
   const [pickerBlockId, setPickerBlockId] = useState<string | null>(null)
   const [pickerQuery, setPickerQuery] = useState('')
+  const [editCitationPicker, setEditCitationPicker] = useState<EditCitationPickerState>(null)
+  const [editCitationQuery, setEditCitationQuery] = useState('')
+  const [editCitationCandidates, setEditCitationCandidates] = useState<CitationCandidate[]>([])
+  const [editCitationBusy, setEditCitationBusy] = useState(false)
+  const [editCursorPosition, setEditCursorPosition] = useState<{
+    blockId: string
+    position: number
+  } | null>(null)
   const [actionState, setActionState] = useState<ActionState>(null)
   const [busyState, setBusyState] = useState<BusyState>(null)
   const [editValue, setEditValue] = useState('')
@@ -508,18 +716,84 @@ export function BlockFeed({
     }
   }, [blocks])
 
-  const activePickerBlockId = pickerBlockId && blocks.some((block) => block.id === pickerBlockId)
-    ? pickerBlockId
-    : null
-  const activeActionState = actionState && blocks.some((block) => block.id === actionState.blockId)
-    ? actionState
-    : null
+  useEffect(() => {
+    let cancelled = false
+
+    if (blocks.length === 0) {
+      return () => {
+        cancelled = true
+      }
+    }
+
+    loadCitationTargetsForBlocks(blocks)
+      .then((nextCitationTargetsById) => {
+        if (!cancelled) {
+          setCitationTargetsById(nextCitationTargetsById)
+        }
+      })
+      .catch((error) => {
+        report('error', 'Failed to load citation targets', error)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [blocks])
+
+  useEffect(() => {
+    if (!highlightedBlockId) return
+
+    const targetElement = document.querySelector<HTMLElement>(
+      `[data-block-id="${highlightedBlockId}"]`,
+    )
+
+    if (!targetElement) return
+
+    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [highlightedBlockId, highlightedBlockVersion])
+
+  useEffect(() => {
+    if (!editCitationPicker) return
+
+    let cancelled = false
+
+    searchCitationCandidates(userId, editCitationQuery)
+      .then((nextCandidates) => {
+        if (!cancelled) {
+          setEditCitationCandidates(nextCandidates)
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          report('error', 'Failed to load edit citation candidates', error)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setEditCitationBusy(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [editCitationPicker, editCitationQuery, userId])
+
+  const activePickerBlockId =
+    pickerBlockId && blocks.some((block) => block.id === pickerBlockId) ? pickerBlockId : null
+  const activeEditCitationPicker =
+    editCitationPicker && blocks.some((block) => block.id === editCitationPicker.blockId)
+      ? editCitationPicker
+      : null
+  const activeActionState =
+    actionState && blocks.some((block) => block.id === actionState.blockId) ? actionState : null
   const normalizedPickerQuery = normalizeTagQuery(pickerQuery)
-  const suggestions = normalizedPickerQuery === ''
-    ? availableTags.slice(0, maxTagSuggestions)
-    : availableTags
-      .filter((tag) => tag.name.includes(normalizedPickerQuery))
-      .slice(0, maxTagSuggestions)
+  const suggestions =
+    normalizedPickerQuery === ''
+      ? availableTags.slice(0, maxTagSuggestions)
+      : availableTags
+          .filter((tag) => tag.name.includes(normalizedPickerQuery))
+          .slice(0, maxTagSuggestions)
   const hasExactSuggestion = availableTags.some((tag) => tag.name === normalizedPickerQuery)
   const canCreateTag = normalizedPickerQuery !== '' && !hasExactSuggestion
 
@@ -539,12 +813,13 @@ export function BlockFeed({
   function openAction(block: Block, mode: ActionMode) {
     setPickerBlockId(null)
     setPickerQuery('')
+    setEditCitationPicker(null)
+    setEditCitationQuery('')
+    setEditCitationCandidates([])
+    setEditCitationBusy(false)
+    setEditCursorPosition(null)
     setActionState({ blockId: block.id, mode })
-    if (mode === 'edit') {
-      setEditValue(block.body ?? '')
-    } else {
-      setEditValue('')
-    }
+    setEditValue(mode === 'edit' ? block.body ?? '' : '')
   }
 
   function closeAction(blockId?: string) {
@@ -553,9 +828,55 @@ export function BlockFeed({
       if (blockId && current.blockId !== blockId) return current
       return null
     })
-    if (!blockId || actionState?.blockId === blockId) {
-      setEditValue('')
-    }
+    setEditCitationPicker((current) => {
+      if (!current) return current
+      if (blockId && current.blockId !== blockId) return current
+      return null
+    })
+    setEditCitationQuery('')
+    setEditCitationCandidates([])
+    setEditCitationBusy(false)
+    setEditCursorPosition((current) => {
+      if (!current) return current
+      if (blockId && current.blockId !== blockId) return current
+      return null
+    })
+    setEditValue('')
+  }
+
+  function openEditCitationPicker(blockId: string, insertionIndex: number) {
+    setEditCitationBusy(true)
+    setEditCitationQuery('')
+    setEditCitationCandidates([])
+    setEditCitationPicker({ blockId, insertionIndex })
+  }
+
+  function closeEditCitationPicker(blockId?: string) {
+    setEditCitationPicker((current) => {
+      if (!current) return current
+      if (blockId && current.blockId !== blockId) return current
+      return null
+    })
+    setEditCitationQuery('')
+    setEditCitationCandidates([])
+    setEditCitationBusy(false)
+  }
+
+  function insertEditCitation(blockId: string, candidate: CitationCandidate) {
+    const pickerState =
+      editCitationPicker?.blockId === blockId ? editCitationPicker : null
+    if (!pickerState) return
+
+    const token = `{{block:${candidate.id}}}`
+    const nextCursorPosition = pickerState.insertionIndex + token.length
+
+    setEditValue((current) =>
+      current.slice(0, pickerState.insertionIndex) +
+      token +
+      current.slice(pickerState.insertionIndex),
+    )
+    setEditCursorPosition({ blockId, position: nextCursorPosition })
+    closeEditCitationPicker(blockId)
   }
 
   async function handleAddTag(blockId: string, rawName: string) {
@@ -592,8 +913,9 @@ export function BlockFeed({
 
         return {
           ...prev,
-          [blockId]: [...currentTags, { ...tag, sources: [pickerTagSource] }]
-            .sort((a, b) => a.name.localeCompare(b.name)),
+          [blockId]: [...currentTags, { ...tag, sources: [pickerTagSource] }].sort((a, b) =>
+            a.name.localeCompare(b.name),
+          ),
         }
       })
       setPickerQuery('')
@@ -626,7 +948,7 @@ export function BlockFeed({
         }
       })
     } catch (error) {
-      report('error', 'Failed to remove picker tag', error)
+      report('error', 'Failed to remove picker tag from block', error)
     } finally {
       setBusyState((current) =>
         current?.blockId === blockId && current.kind === 'tag' ? null : current,
@@ -649,15 +971,16 @@ export function BlockFeed({
         blockId: block.id,
         body: nextBody,
       })
-      onBlockUpdated(updatedBlock)
-      await reconcileInlineTagsForBlock(block.id, nextBody, userId)
       await Promise.all([
-        refreshAvailableTags(),
-        refreshBlockTags(block.id),
+        reconcileInlineTagsForBlock(block.id, nextBody, userId),
+        reconcileBlockReferences(block.id, nextBody),
       ])
+      onBlockUpdated(updatedBlock)
+      await Promise.all([refreshAvailableTags(), refreshBlockTags(block.id)])
       closeAction(block.id)
     } catch (error) {
       if (updatedBlock) {
+        onBlockUpdated(updatedBlock)
         closeAction(block.id)
       }
       report('error', 'Failed to save block edit', error)
@@ -735,11 +1058,20 @@ export function BlockFeed({
             tags={tagsByBlockId[block.id] ?? []}
             folders={folders}
             conversations={conversations}
+            citationTargetsById={citationTargetsById}
+            highlighted={highlightedBlockId === block.id}
             actionMode={activeActionState?.blockId === block.id ? activeActionState.mode : null}
             isPickerOpen={activePickerBlockId === block.id}
+            isEditCitationPickerOpen={activeEditCitationPicker?.blockId === block.id}
             pickerQuery={pickerQuery}
             pickerBusy={busyState?.blockId === block.id && busyState.kind === 'tag'}
             editValue={activeActionState?.blockId === block.id ? editValue : block.body ?? ''}
+            editCitationQuery={activeEditCitationPicker?.blockId === block.id ? editCitationQuery : ''}
+            editCitationBusy={activeEditCitationPicker?.blockId === block.id && editCitationBusy}
+            editCitationCandidates={
+              activeEditCitationPicker?.blockId === block.id ? editCitationCandidates : []
+            }
+            editCursorPosition={editCursorPosition?.blockId === block.id ? editCursorPosition.position : null}
             blockBusy={busyState?.blockId === block.id ? busyState.kind : null}
             suggestions={suggestions}
             canCreateTag={canCreateTag}
@@ -759,6 +1091,18 @@ export function BlockFeed({
             onAddTag={(name) => void handleAddTag(block.id, name)}
             onRemovePickerTag={(tagId) => void handleRemovePickerTag(block.id, tagId)}
             onStartEdit={() => openAction(block, 'edit')}
+            onOpenEditCitationPicker={(insertionIndex) =>
+              openEditCitationPicker(block.id, insertionIndex)}
+            onCloseEditCitationPicker={() => closeEditCitationPicker(block.id)}
+            onEditCitationQueryChange={(value) => {
+              setEditCitationBusy(true)
+              setEditCitationQuery(value)
+            }}
+            onInsertEditCitation={(candidate) => insertEditCitation(block.id, candidate)}
+            onEditCursorApplied={() =>
+              setEditCursorPosition((current) =>
+                current?.blockId === block.id ? null : current,
+              )}
             onEditValueChange={setEditValue}
             onSaveEdit={() => void handleSaveEdit(block)}
             onStartMove={() => openAction(block, 'move')}
@@ -766,6 +1110,7 @@ export function BlockFeed({
               void handleMoveBlock(block, destinationConversationId)}
             onStartDelete={() => openAction(block, 'delete')}
             onConfirmDelete={() => void handleDeleteBlock(block)}
+            onJumpToBlock={onJumpToBlock}
           />
         ))}
         <div ref={bottomRef} />
@@ -788,9 +1133,7 @@ function ActionMenuButton({
       type="button"
       onClick={onClick}
       className={`w-full rounded-xl px-3 py-2 text-left text-sm ${
-        destructive
-          ? 'text-red-300 hover:bg-red-950/40'
-          : 'text-zinc-200 hover:bg-zinc-800'
+        destructive ? 'text-red-300 hover:bg-red-950/40' : 'text-zinc-200 hover:bg-zinc-800'
       }`}
     >
       {label}

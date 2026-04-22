@@ -17,6 +17,7 @@
 - DB types (`src/db/types.ts`) — hand-written `Database` type for Supabase client inference. Regenerate with `npx supabase gen types typescript` after running migrations.
 - `src/lib/errors.ts` centralizes visible runtime reporting with `report('error' | 'warn' | 'info', ...)`, FIFO retention, subscribers for future UI, console mirroring, and one-time global `error` / `unhandledrejection` handlers. Activated at startup via `installGlobalErrorHandlers(window)` in `src/main.tsx`.
 - Block management in `src/components/feed/BlockFeed.tsx` — each Block has a local actions menu with a visible action button plus `double-click` / touch `long-press` shortcuts. Text Blocks can be edited inline with explicit save/cancel; any edit re-runs inline `#hashtag` reconciliation through `src/lib/tags.ts`. Text and divider Blocks can be moved to another Conversation via a picker or deleted via inline confirmation. Drag-to-sidebar and orphan-citation UI are still deferred.
+- Citations are live across the MVP writing loop. Typing `@` in `src/components/composer/Composer.tsx` at the start of input or after whitespace opens a citation picker over existing text Blocks, inserting raw `{{block:<uuid>}}` tokens into the body. `src/lib/references.ts` reconciles `block_references` on create/edit, and `src/lib/markdown.ts` renders citation pills in `src/components/feed/BlockFeed.tsx`. Clicking a citation pill jumps to the target Block, switching Conversations when needed and temporarily highlighting the destination Block. Missing targets render as `[deleted]`.
 
 ## Reference prototype
 
@@ -43,8 +44,8 @@ When building the real thing under `src/`:
 - [x] Delete Folder / Conversation from sidebar: delete controls live in the sidebar tree; deleting a Folder cascades to its child Conversations via the existing foreign keys; if the selected Conversation is deleted, selection falls back to another Conversation or clears when none remain.
 - [x] Delete confirmation: deleting a Folder or Conversation requires a browser confirmation prompt before the destructive action runs.
 - [x] Tag picker UI: block-level picker in `src/components/feed/BlockFeed.tsx`; applied tags render as pills below text Blocks, picker tags can be added/removed without touching inline `#hashtag` rows (see §022)
-- [ ] Citation picker (`@` in composer → Block picker → insert `{{block:<uuid>}}`)
-- [ ] Clickable citation pills (navigate + highlight target)
+- [x] Citation picker (`@` in composer → Block picker → insert `{{block:<uuid>}}`)
+- [x] Clickable citation pills (navigate + highlight target)
 - [ ] Drag-to-reorder Blocks within Conversation
 - [ ] Drag-to-reorder sidebar tree
 - [x] Move Block to another Conversation (picker in Block actions menu; drag-to-sidebar still deferred)
