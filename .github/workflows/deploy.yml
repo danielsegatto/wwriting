@@ -25,6 +25,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+        with:
+          enablement: true
+
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
@@ -36,9 +41,6 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v6
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
