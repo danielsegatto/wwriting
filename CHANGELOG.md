@@ -12,7 +12,7 @@ Newest entries first. One line per change. Format:
 
 ## 2026-04-22
 
-- Add inline Create Folder / Create Conversation to sidebar: "+" in header creates a folder; "+" on hover per folder creates a conversation; inline input with Enter/Escape/blur handling; auto-navigate on creation.
+- Add inline Create Folder / Create Conversation to sidebar: "+" in header creates a folder; "+" on hover per folder creates a conversation; inline input with Enter/Escape/blur handling; auto-navigate on creation. (cba8976)
 - Add Sidebar tree: collapsible folders, conversation leaves, click-to-select; `src/lib/folders.ts` + `listConversations` added to `src/lib/conversations.ts`; App.tsx refactored to two-column layout with split effects.
 - Add BlockFeed component with Markdown rendering (`marked`), divider support, optimistic append, and history load on mount. (0caa535)
 - Add Composer component with Enter-to-send, Shift+Enter newline, divider detection, inline #hashtag parsing. (6a23717)
