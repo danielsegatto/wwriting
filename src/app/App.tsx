@@ -1,11 +1,16 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { AuthGate } from './AuthGate.tsx'
 import { Composer } from '../components/composer/Composer.tsx'
 import { BlockFeed } from '../components/feed/BlockFeed.tsx'
 import { Sidebar } from '../components/sidebar/Sidebar.tsx'
 import { ErrorConsole } from '../components/system/ErrorConsole.tsx'
-import { highlightDurationMs } from '../lib/constants.ts'
+import {
+  blockPreviewCollapseThreshold,
+  citationPickerPreviewLength,
+  highlightDurationMs,
+} from '../lib/constants.ts'
 import { ensureDefaultConversation, getConversation } from '../lib/conversations.ts'
 import { createAppendPosition, createBlock, listBlocks } from '../lib/blocks.ts'
 import type { Block, ClientBlock } from '../lib/blocks.ts'
@@ -17,6 +22,15 @@ import {
 import { report } from '../lib/errors.ts'
 import { loadCitationTargetsForBlocks, reconcileBlockReferences } from '../lib/references.ts'
 import type { CitationTarget } from '../lib/references.ts'
+import {
+  searchWorkspace,
+} from '../lib/search.ts'
+import type {
+  BlockSearchResult,
+  ConversationSearchResult,
+  FolderSearchResult,
+  WorkspaceSearchResults,
+} from '../lib/search.ts'
 import { supabase } from '../lib/supabase.ts'
 import { reconcileInlineTagsForBlock } from '../lib/tags.ts'
 
@@ -109,6 +123,102 @@ function DownloadIcon() {
   )
 }
 
+function SearchIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="m10.5 10.5 3 3" />
+    </svg>
+  )
+}
+
+function normalizeSearchPreviewBody(body: string): string {
+  return body.replace(/\s+/g, ' ').trim()
+}
+
+function SearchSection({
+  title,
+  count,
+  children,
+}: {
+  title: string
+  count: number
+  children: ReactNode
+}) {
+  if (count === 0) return null
+
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between px-1">
+        <h3 className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">{title}</h3>
+        <span className="text-[11px] uppercase tracking-[0.2em] text-zinc-600">{count}</span>
+      </div>
+      <div className="space-y-2">{children}</div>
+    </section>
+  )
+}
+
+function SearchResultButton({
+  title,
+  meta,
+  onSelect,
+}: {
+  title: string
+  meta: string
+  onSelect: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="w-full rounded-2xl border border-zinc-800 bg-zinc-950/70 px-3 py-3 text-left hover:border-zinc-700 hover:bg-zinc-950"
+    >
+      <p className="text-sm leading-6 text-zinc-100">{title}</p>
+      <p className="mt-2 text-xs uppercase tracking-[0.2em] text-zinc-500">{meta}</p>
+    </button>
+  )
+}
+
+function BlockSearchResultButton({
+  result,
+  onSelect,
+}: {
+  result: BlockSearchResult
+  onSelect: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const normalizedBody = normalizeSearchPreviewBody(result.body)
+  const isLongBody = normalizedBody.length > blockPreviewCollapseThreshold
+  const visibleBody =
+    isLongBody && !expanded
+      ? `${normalizedBody.slice(0, citationPickerPreviewLength).trimEnd()}...`
+      : normalizedBody || '[empty]'
+
+  return (
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 px-3 py-3 hover:border-zinc-700 hover:bg-zinc-950">
+      <button type="button" onClick={onSelect} className="w-full text-left">
+        <p className="text-sm leading-6 text-zinc-100">{visibleBody}</p>
+        <p className="mt-2 text-xs uppercase tracking-[0.2em] text-zinc-500">
+          {result.conversationName ?? 'Untitled conversation'}
+        </p>
+      </button>
+      {isLongBody && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            setExpanded((current) => !current)
+          }}
+          className="mt-2 text-xs font-medium text-blue-300 hover:text-blue-200"
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 async function copyTextToClipboard(text: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text)
@@ -170,6 +280,16 @@ function AppShell({ session }: { session: Session }) {
     version: number
   } | null>(null)
   const [exportFeedback, setExportFeedback] = useState<'copied' | 'downloaded' | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<WorkspaceSearchResults>({
+    folders: [],
+    conversations: [],
+    blocks: [],
+  })
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const searchRootRef = useRef<HTMLDivElement>(null)
+  const deferredSearchQuery = useDeferredValue(searchQuery)
 
   // Bootstrap default conversation on first load
   useEffect(() => {
@@ -458,6 +578,74 @@ function AppShell({ session }: { session: Session }) {
     }
   }, [exportFeedback])
 
+  useEffect(() => {
+    const normalizedQuery = deferredSearchQuery.trim()
+
+    if (normalizedQuery === '') {
+      setSearchLoading(false)
+      setSearchResults({
+        folders: [],
+        conversations: [],
+        blocks: [],
+      })
+      return
+    }
+
+    let cancelled = false
+    setSearchLoading(true)
+
+    const timeoutId = window.setTimeout(() => {
+      searchWorkspace(session.user.id, normalizedQuery)
+        .then((results) => {
+          if (!cancelled) {
+            setSearchResults(results)
+            setSearchOpen(true)
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setSearchResults({
+              folders: [],
+              conversations: [],
+              blocks: [],
+            })
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setSearchLoading(false)
+          }
+        })
+    }, 140)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [deferredSearchQuery, session.user.id])
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!searchRootRef.current?.contains(event.target as Node)) {
+        setSearchOpen(false)
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setSearchOpen(false)
+      }
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
   const buildConversationMarkdown = useCallback(async () => {
     if (!conversationId) {
       throw new Error('No conversation selected for export')
@@ -501,6 +689,48 @@ function AppShell({ session }: { session: Session }) {
     }
   }, [buildConversationMarkdown])
 
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false)
+    setSearchQuery('')
+    setSearchLoading(false)
+  }, [])
+
+  const handleSelectConversationResult = useCallback((result: ConversationSearchResult) => {
+    closeSearch()
+    handleSelectConversation(result.id)
+    setSidebarOpen(false)
+  }, [closeSearch, handleSelectConversation])
+
+  const handleSelectFolderResult = useCallback((result: FolderSearchResult) => {
+    closeSearch()
+
+    if (result.firstConversationId) {
+      handleSelectConversation(result.firstConversationId)
+      setSidebarOpen(false)
+      return
+    }
+
+    setSidebarOpen(true)
+    report('info', `Opened sidebar for empty folder "${result.name}"`)
+  }, [closeSearch, handleSelectConversation])
+
+  const handleSelectBlockResult = useCallback((result: BlockSearchResult) => {
+    closeSearch()
+    handleJumpToBlock({
+      id: result.id,
+      body: result.body,
+      conversationId: result.conversationId,
+      conversationName: result.conversationName,
+      deleted: false,
+    })
+  }, [closeSearch, handleJumpToBlock])
+
+  const hasSearchResults =
+    searchResults.folders.length > 0 ||
+    searchResults.conversations.length > 0 ||
+    searchResults.blocks.length > 0
+  const showSearchOverlay = searchOpen && searchQuery.trim() !== ''
+
   return (
     <div className="flex h-dvh min-h-0 w-full overflow-hidden bg-zinc-950 text-zinc-100">
       {sidebarOpen && (
@@ -529,8 +759,80 @@ function AppShell({ session }: { session: Session }) {
           >
             <MenuIcon />
           </button>
-          <div className="relative z-20 ml-2 min-w-0 flex-1 truncate text-sm font-medium text-zinc-100">
-            {conversationTitle}
+          <div className="relative z-20 ml-2 hidden min-w-0 flex-1 md:block">
+            <div className="min-w-0 truncate text-sm font-medium text-zinc-100">
+              {conversationTitle}
+            </div>
+          </div>
+          <div ref={searchRootRef} className="relative z-20 ml-2 w-full max-w-[11rem] sm:ml-3 sm:max-w-sm">
+            <label className="flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-zinc-400 focus-within:border-zinc-700 focus-within:text-zinc-300">
+              <SearchIcon />
+              <input
+                type="search"
+                value={searchQuery}
+                onFocus={() => {
+                  if (searchQuery.trim() !== '') {
+                    setSearchOpen(true)
+                  }
+                }}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value)
+                  setSearchOpen(event.target.value.trim() !== '')
+                }}
+                placeholder="Search blocks, conversations, folders"
+                className="min-w-0 flex-1 bg-transparent text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
+              />
+              <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-600">Search</span>
+            </label>
+            {showSearchOverlay && (
+              <div className="absolute right-0 left-0 top-[calc(100%+0.5rem)] max-h-[28rem] overflow-y-auto rounded-3xl border border-zinc-800 bg-zinc-950/96 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur">
+                {searchLoading ? (
+                  <div className="px-2 py-8 text-center text-xs uppercase tracking-[0.2em] text-zinc-500">
+                    Searching
+                  </div>
+                ) : hasSearchResults ? (
+                  <div className="space-y-4">
+                    <SearchSection title="Blocks" count={searchResults.blocks.length}>
+                      {searchResults.blocks.map((result) => (
+                        <BlockSearchResultButton
+                          key={result.id}
+                          result={result}
+                          onSelect={() => { handleSelectBlockResult(result) }}
+                        />
+                      ))}
+                    </SearchSection>
+                    <SearchSection title="Conversations" count={searchResults.conversations.length}>
+                      {searchResults.conversations.map((result) => (
+                        <SearchResultButton
+                          key={result.id}
+                          title={result.name}
+                          meta={result.folderName ? `In ${result.folderName}` : 'Conversation'}
+                          onSelect={() => { handleSelectConversationResult(result) }}
+                        />
+                      ))}
+                    </SearchSection>
+                    <SearchSection title="Folders" count={searchResults.folders.length}>
+                      {searchResults.folders.map((result) => (
+                        <SearchResultButton
+                          key={result.id}
+                          title={result.name}
+                          meta={
+                            result.conversationCount === 1
+                              ? '1 conversation'
+                              : `${result.conversationCount} conversations`
+                          }
+                          onSelect={() => { handleSelectFolderResult(result) }}
+                        />
+                      ))}
+                    </SearchSection>
+                  </div>
+                ) : (
+                  <div className="px-2 py-8 text-center text-xs uppercase tracking-[0.2em] text-zinc-500">
+                    No matches
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div className="relative z-20 ml-3 flex items-center gap-1">
             <button

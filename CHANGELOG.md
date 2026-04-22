@@ -12,6 +12,7 @@ Newest entries first. One line per change. Format:
 
 ## 2026-04-22
 
+- Add grouped workspace search in the header for folders, conversations, and text blocks, with block jump/highlight navigation and empty-folder fallback to the sidebar.
 - Add visible in-app error UI: unread-error banner, bottom status strip, expandable event log, and reporter read/clear controls.
 - Add optimistic local send with retry/backoff, failed-send retry UI, and client-only pending Block state in the feed.
 - Pin Vite back to the latest `vite-plugin-pwa`-compatible line so GitHub Pages `npm ci` succeeds again.

@@ -333,3 +333,16 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - `src/components/system/ErrorConsole.tsx` owns the reporter subscription, unread/read transitions, detail formatting, and clear-log controls; `src/app/App.tsx` only mounts it.
 - The app now has three distinct severity surfaces: unread errors appear in the top banner, all severities contribute to the bottom status strip counts, and full details live in the expandable event log.
 - The reporter store remains in-memory only. Reloading the page clears read state and prior entries; persistent diagnostics remain a possible later follow-up, not part of this slice.
+
+## 030 — 2026-04-22 — Header search ships as grouped `ilike` search before any schema migration
+
+**Status:** accepted.
+**Decision:** The first search slice lives in the `AppShell` header as one search field with grouped results for Folders, Conversations, and text Blocks. The implementation uses existing-table `ilike` queries from `src/lib/search.ts` rather than a new `tsvector` column/index migration. Selecting a Block result reuses the existing jump/highlight flow; selecting a Conversation opens it directly; selecting a Folder opens its first Conversation, or reopens the sidebar if the Folder is empty.
+**Rejected:**
+- Waiting for the eventual Phase 2 `tsvector` migration before shipping any search UI: rejected because search is already a product promise and `docs/07-ask-first.md` requires human approval before schema/index changes.
+- Separate search surfaces for folders, conversations, and blocks: rejected because it adds friction to the hot path and makes search feel like administration instead of recall.
+- A command-palette-only search entry point: rejected because command palette is explicitly Phase 3 theater-layer work, while search is a Phase 2 functional requirement.
+**Consequences:**
+- Search quality is substring-based for now. It will miss stemming/tokenization cases that a real full-text index would catch, but it works immediately on the current schema.
+- `src/app/App.tsx` now owns search query state, grouped-result overlay UI, and selection handling, while `src/lib/search.ts` owns the Supabase queries and result shaping.
+- Folder results need a deterministic navigation target because the main pane renders Conversations, not Folders. The "first Conversation in the Folder, otherwise open the sidebar" rule is now part of the product behavior unless revisited later.

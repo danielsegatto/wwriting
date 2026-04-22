@@ -20,6 +20,7 @@
 - Citations are live across the MVP writing loop. Typing `@` in `src/components/composer/Composer.tsx` at the start of input or after whitespace opens a citation picker over existing text Blocks, inserting raw `{{block:<uuid>}}` tokens into the body. `src/lib/references.ts` reconciles `block_references` on create/edit, and `src/lib/markdown.ts` renders citation pills in `src/components/feed/BlockFeed.tsx`. Clicking a citation pill jumps to the target Block, switching Conversations when needed and temporarily highlighting the destination Block. Missing targets render as `[deleted]`.
 - Tagging now has two authoring paths. Inline `#hashtag` text still reconciles on save, and the composer now opens a live tag picker while typing `#` so existing Tags can be inserted quickly or new Tags can be created from the current token before the Block is sent.
 - Conversation export is live from the main header in `src/app/App.tsx`. The current Conversation can be copied to the clipboard or downloaded as Markdown; export prepends an `# H1` title, emits divider Blocks as literal `---`, translates `{{block:<uuid>}}` tokens into Markdown links to `/b/<uuid>`, and leaves missing targets as `[deleted]`. Formatting lives in `src/lib/conversationMarkdown.ts` with unit tests.
+- Workspace search is live from the main header in `src/app/App.tsx`. A single search field queries Folder names, Conversation names, and text Block bodies with grouped results. Choosing a Conversation result opens it, choosing a Block result jumps to and highlights that Block (switching Conversations when needed), and choosing a Folder opens its first Conversation or reopens the sidebar when the Folder is empty. Search currently uses `ilike` queries against the existing schema; the Phase 2 `tsvector` migration remains a later optimization that still requires human approval because it changes indexes/schema.
 - Optimistic local send is live. Pressing Enter in `src/components/composer/Composer.tsx` appends a client-only pending Block to the feed immediately; `src/app/App.tsx` retries the actual insert with backoff, swaps the pending Block for the real row on success, and marks the Block failed with a retry button if all attempts fail. Block actions stay disabled until the server acknowledges the row.
 
 ## Reference prototype
@@ -63,7 +64,7 @@ When building the real thing under `src/`:
 
 ## Planned — Phase 2 (connective tissue)
 
-- [ ] Full-text search across Blocks, Conversations, Folders
+- [x] Full-text search across Blocks, Conversations, Folders
 - [ ] Filter by tag
 - [ ] Backlinks view for a Block
 - [ ] Clickable `/b/<uuid>` URLs that resolve to Blocks
