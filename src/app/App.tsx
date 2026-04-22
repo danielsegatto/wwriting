@@ -8,7 +8,12 @@ import { highlightDurationMs } from '../lib/constants.ts'
 import { ensureDefaultConversation, getConversation } from '../lib/conversations.ts'
 import { listBlocks } from '../lib/blocks.ts'
 import type { Block } from '../lib/blocks.ts'
+import {
+  createConversationMarkdownFilename,
+  serializeConversationToMarkdown,
+} from '../lib/conversationMarkdown.ts'
 import { report } from '../lib/errors.ts'
+import { loadCitationTargetsForBlocks } from '../lib/references.ts'
 import type { CitationTarget } from '../lib/references.ts'
 
 function MenuIcon() {
@@ -19,6 +24,64 @@ function MenuIcon() {
       <line x1="2" y1="12" x2="14" y2="12" />
     </svg>
   )
+}
+
+function CopyIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="5" y="3" width="8" height="10" rx="1.5" />
+      <path d="M3 11V5.5A1.5 1.5 0 0 1 4.5 4H5" />
+    </svg>
+  )
+}
+
+function DownloadIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 2.5v7" />
+      <path d="m5.5 7.5 2.5 2.5 2.5-2.5" />
+      <path d="M3 12.5h10" />
+    </svg>
+  )
+}
+
+async function copyTextToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+
+  try {
+    const copied = document.execCommand('copy')
+    if (!copied) {
+      throw new Error('document.execCommand("copy") returned false')
+    }
+  } finally {
+    document.body.removeChild(textarea)
+  }
+}
+
+function downloadTextFile(filename: string, text: string, mimeType: string): void {
+  const blob = new Blob([text], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+
+  window.setTimeout(() => {
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(url)
+  }, 100)
 }
 
 export function App() {
@@ -42,6 +105,7 @@ function AppShell({ session }: { session: Session }) {
     blockId: string
     version: number
   } | null>(null)
+  const [exportFeedback, setExportFeedback] = useState<'copied' | 'downloaded' | null>(null)
 
   // Bootstrap default conversation on first load
   useEffect(() => {
@@ -149,6 +213,61 @@ function AppShell({ session }: { session: Session }) {
     }
   }, [highlightedBlock])
 
+  useEffect(() => {
+    if (!exportFeedback) return
+
+    const timeoutId = window.setTimeout(() => {
+      setExportFeedback((current) => (current === exportFeedback ? null : current))
+    }, 1800)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [exportFeedback])
+
+  const buildConversationMarkdown = useCallback(async () => {
+    if (!conversationId) {
+      throw new Error('No conversation selected for export')
+    }
+
+    const citationTargetsById = await loadCitationTargetsForBlocks(blocks)
+    const markdown = serializeConversationToMarkdown({
+      conversationName: conversationTitle === '—' ? 'Untitled conversation' : conversationTitle,
+      blocks,
+      citationTargetsById,
+      appBaseUrl: window.location.origin,
+    })
+
+    return {
+      markdown,
+      filename: createConversationMarkdownFilename(
+        conversationTitle === '—' ? 'Untitled conversation' : conversationTitle,
+      ),
+    }
+  }, [blocks, conversationId, conversationTitle])
+
+  const handleCopyConversation = useCallback(async () => {
+    try {
+      const { markdown } = await buildConversationMarkdown()
+      await copyTextToClipboard(markdown)
+      setExportFeedback('copied')
+      report('info', 'Copied conversation as Markdown')
+    } catch (err) {
+      report('error', 'Failed to copy conversation as Markdown', err)
+    }
+  }, [buildConversationMarkdown])
+
+  const handleDownloadConversation = useCallback(async () => {
+    try {
+      const { markdown, filename } = await buildConversationMarkdown()
+      downloadTextFile(filename, markdown, 'text/markdown;charset=utf-8')
+      setExportFeedback('downloaded')
+      report('info', 'Downloaded conversation as Markdown')
+    } catch (err) {
+      report('error', 'Failed to download conversation as Markdown', err)
+    }
+  }, [buildConversationMarkdown])
+
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-100">
       {sidebarOpen && (
@@ -179,6 +298,31 @@ function AppShell({ session }: { session: Session }) {
           </button>
           <div className="relative z-20 ml-2 min-w-0 flex-1 truncate text-sm font-medium text-zinc-100">
             {conversationTitle}
+          </div>
+          <div className="relative z-20 ml-3 flex items-center gap-1">
+            <button
+              type="button"
+              aria-label="Copy conversation as Markdown"
+              title="Copy conversation as Markdown"
+              disabled={!conversationId}
+              onClick={() => { void handleCopyConversation() }}
+              className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <CopyIcon />
+            </button>
+            <button
+              type="button"
+              aria-label="Download conversation as Markdown"
+              title="Download conversation as Markdown"
+              disabled={!conversationId}
+              onClick={() => { void handleDownloadConversation() }}
+              className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <DownloadIcon />
+            </button>
+            <div className="min-w-[4.5rem] text-right text-[11px] uppercase tracking-[0.18em] text-zinc-500">
+              {exportFeedback === 'copied' ? 'Copied' : exportFeedback === 'downloaded' ? 'Saved' : ''}
+            </div>
           </div>
         </div>
         {conversationId ? (

@@ -12,6 +12,7 @@ Newest entries first. One line per change. Format:
 
 ## 2026-04-22
 
+- Add Conversation Markdown export in the header with shared copy/download formatting, citation-link translation, and unit tests.
 - Add Block drag-to-reorder, multi-select bulk move/delete, and composer `#` tag suggestions with create-from-composer support.
 - Fix citation picker trigger so `@` opens in the composer and inline block editing, including edit-mode citation insertion.
 - Add end-to-end citations: `@` composer picker, `block_references` reconciliation on create/edit, rendered citation pills with cross-conversation jump + highlight, and unit tests for `src/lib/references.ts` / `src/lib/markdown.ts`.

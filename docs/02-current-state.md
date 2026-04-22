@@ -19,6 +19,7 @@
 - Block management in `src/components/feed/BlockFeed.tsx` — each Block has a local actions menu with a visible action button plus `double-click` / touch `long-press` shortcuts. Text Blocks can be edited inline with explicit save/cancel; any edit re-runs inline `#hashtag` reconciliation through `src/lib/tags.ts`. Text and divider Blocks can be dragged to reorder within the current Conversation, moved to another Conversation via a picker, or deleted via inline confirmation. Blocks can also be multi-selected for bulk move/delete actions. Drag-to-sidebar and orphan-citation UI are still deferred.
 - Citations are live across the MVP writing loop. Typing `@` in `src/components/composer/Composer.tsx` at the start of input or after whitespace opens a citation picker over existing text Blocks, inserting raw `{{block:<uuid>}}` tokens into the body. `src/lib/references.ts` reconciles `block_references` on create/edit, and `src/lib/markdown.ts` renders citation pills in `src/components/feed/BlockFeed.tsx`. Clicking a citation pill jumps to the target Block, switching Conversations when needed and temporarily highlighting the destination Block. Missing targets render as `[deleted]`.
 - Tagging now has two authoring paths. Inline `#hashtag` text still reconciles on save, and the composer now opens a live tag picker while typing `#` so existing Tags can be inserted quickly or new Tags can be created from the current token before the Block is sent.
+- Conversation export is live from the main header in `src/app/App.tsx`. The current Conversation can be copied to the clipboard or downloaded as Markdown; export prepends an `# H1` title, emits divider Blocks as literal `---`, translates `{{block:<uuid>}}` tokens into Markdown links to `/b/<uuid>`, and leaves missing targets as `[deleted]`. Formatting lives in `src/lib/conversationMarkdown.ts` with unit tests.
 
 ## Reference prototype
 
@@ -53,7 +54,7 @@ When building the real thing under `src/`:
 - [x] Edit Block (visible action button plus double-click / long-press shortcut; text Blocks only)
 - [x] Delete Block (inline confirmation in Block actions menu; orphan-citation UI still deferred)
 - [x] Multi-select Blocks for bulk move/delete
-- [ ] Export Conversation as Markdown (download + copy)
+- [x] Export Conversation as Markdown (download + copy)
 - [ ] Export full workspace as zip of `.md` files
 - [ ] Realtime sync (Supabase/Pocketbase subscription)
 - [ ] Optimistic local state on send

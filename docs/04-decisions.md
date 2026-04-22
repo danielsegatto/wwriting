@@ -238,3 +238,16 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - Inline hashtag reconciliation can no longer live only in the Composer; `src/lib/tags.ts` owns reusable extract/ensure/reconcile helpers so edits and creates follow the same rules.
 - The source conversation updates immediately after move/delete by removing the Block from local feed state; destination conversations pick the Block up on reload/navigation.
 - Drag-to-sidebar remains a separate follow-up feature. Do not treat this decision as having completed the drag half of the original backlog item.
+
+## 024 — 2026-04-22 — Conversation export lives in the header and preserves Markdown source
+
+**Status:** accepted.
+**Decision:** Exporting the current Conversation is exposed as two header actions in `AppShell`: copy as Markdown and download as `.md`. The exported text begins with an H1 title using the Conversation name, preserves text Block bodies as Markdown source, emits divider Blocks as literal `---`, converts `{{block:<uuid>}}` tokens into Markdown links to `/b/<uuid>`, and renders missing targets as `[deleted]`.
+**Rejected:**
+- Sidebar- or menu-only export: rejected because export is part of the core writing/backup loop and should stay one click away from the active Conversation.
+- HTML export: rejected because `docs/04-decisions.md` §010 already makes Markdown canonical for storage and export.
+- Prototype-style labeled divider export: rejected for the real app because the current implementation treats divider Blocks as plain divider markers rather than named section headers.
+**Consequences:**
+- `src/lib/conversationMarkdown.ts` owns the pure export formatter and filename helper so the export rules are unit-testable outside the browser.
+- `src/app/App.tsx` loads citation targets only when the user exports, keeping the compose/render path unchanged.
+- Copy and download share the same formatter, so clipboard export and file export stay byte-for-byte aligned.
