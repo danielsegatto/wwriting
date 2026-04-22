@@ -6,12 +6,13 @@ import { report } from '../../lib/errors.ts'
 type Props = {
   conversationId: string
   userId: string
+  onBlockCreated?: (block: import('../../lib/blocks.ts').Block) => void
 }
 
 const HASHTAG_RE = /(?:^|\s)#([a-zA-Z0-9_]+)/g
 const DIVIDER_RE = /^---+$/
 
-export function Composer({ conversationId, userId }: Props) {
+export function Composer({ conversationId, userId, onBlockCreated }: Props) {
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -33,6 +34,7 @@ export function Composer({ conversationId, userId }: Props) {
       const position = Date.now().toString()
 
       const block = await createBlock({ conversationId, userId, body: trimmed, position, type })
+      onBlockCreated?.(block)
 
       const tagNames = [...trimmed.matchAll(HASHTAG_RE)].map((m) => m[1])
       if (tagNames.length > 0) {

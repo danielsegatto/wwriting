@@ -4,6 +4,21 @@ import type { Database, BlockType } from '../db/types.ts'
 
 export type Block = Database['public']['Tables']['blocks']['Row']
 
+export async function listBlocks(conversationId: string): Promise<Block[]> {
+  const { data, error } = await supabase
+    .from('blocks')
+    .select()
+    .eq('conversation_id', conversationId)
+    .order('position', { ascending: true })
+
+  if (error) {
+    report('error', 'Failed to list blocks', error)
+    throw error
+  }
+
+  return data
+}
+
 export async function createBlock(params: {
   conversationId: string
   userId: string
