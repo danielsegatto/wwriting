@@ -95,16 +95,24 @@ function AppShell({ session }: { session: Session }) {
           onClose={() => setSidebarOpen(false)}
         />
       )}
-      <div className="flex flex-1 flex-col min-w-0">
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        {sidebarOpen && (
+          <button
+            type="button"
+            aria-label="Close sidebar"
+            onClick={() => setSidebarOpen(false)}
+            className="absolute inset-0 z-10 cursor-default"
+          />
+        )}
         <div className="flex items-center px-3 py-2 border-b border-zinc-800">
           <button
             onClick={() => setSidebarOpen((o) => !o)}
             title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-            className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+            className="relative z-20 rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
           >
             <MenuIcon />
           </button>
-          <div className="ml-2 min-w-0 flex-1 truncate text-sm font-medium text-zinc-100">
+          <div className="relative z-20 ml-2 min-w-0 flex-1 truncate text-sm font-medium text-zinc-100">
             {conversationTitle}
           </div>
         </div>
