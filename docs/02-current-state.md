@@ -41,7 +41,7 @@ When building the real thing under `src/`:
 - [x] Create Folder / Conversation from sidebar: inline input in sidebar tree; Enter confirms, Escape/blur cancels; auto-navigate on conversation creation (see §021).
 - [x] Delete Folder / Conversation from sidebar: delete controls live in the sidebar tree; deleting a Folder cascades to its child Conversations via the existing foreign keys; if the selected Conversation is deleted, selection falls back to another Conversation or clears when none remain.
 - [x] Delete confirmation: deleting a Folder or Conversation requires a browser confirmation prompt before the destructive action runs.
-- [ ] Tag picker UI (explicit tag assignment)
+- [x] Tag picker UI: block-level picker in `src/components/feed/BlockFeed.tsx`; applied tags render as pills below text Blocks, picker tags can be added/removed without touching inline `#hashtag` rows (see §022)
 - [ ] Citation picker (`@` in composer → Block picker → insert `{{block:<uuid>}}`)
 - [ ] Clickable citation pills (navigate + highlight target)
 - [ ] Drag-to-reorder Blocks within Conversation

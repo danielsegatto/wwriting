@@ -209,3 +209,16 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - After creating a conversation, the Sidebar calls `onSelectConversation` with the new ID, so `AppShell` auto-navigates to it.
 - Creating a folder with a collapsed target folder auto-expands it so the new conversation input is visible.
 - No optimistic UI beyond local state — the row only appears after the DB insert succeeds.
+
+## 022 — 2026-04-22 — Tag picker lives on each Block, not in the Composer
+
+**Status:** accepted.
+**Decision:** Explicit Tag assignment via the picker is attached to each text Block in the feed, opened from a lightweight local control on the Block itself. The Composer remains focused on send-only writing; inline `#hashtag` remains the fast-path tagging workflow during composition.
+**Rejected:**
+- Composer-level tag controls: rejected because they add friction and visual weight to the hot writing path, which violates Goal 1.
+- Modal or route-based tag management: rejected because the operation is lightweight and should stay close to the Block being tagged.
+- Divider tagging: rejected because divider Blocks are structural markers, not content Blocks.
+**Consequences:**
+- The feed owns enough block metadata UI to display applied Tag pills and open a small picker for text Blocks.
+- Picker-applied tags write `block_tags` rows with `source='picker'`; removing a picker Tag only deletes that provenance row and must not affect inline tags derived from `body`.
+- A visible Tag pill is the union of picker and inline sources. If both exist for the same Tag, removing the picker source leaves the pill visible.

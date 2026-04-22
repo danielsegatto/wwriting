@@ -84,7 +84,7 @@ function AppShell({ session }: { session: Session }) {
         </div>
         {conversationId ? (
           <>
-            <BlockFeed blocks={blocks} />
+            <BlockFeed blocks={blocks} userId={session.user.id} />
             <Composer
               conversationId={conversationId}
               userId={session.user.id}
