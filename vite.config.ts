@@ -2,7 +2,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  base: command === 'build' ? '/wwriting/' : '/',
   plugins: [tailwindcss(), react()],
   resolve: {
     // @supabase/auth-ui-react bundles its own React 18, causing the
@@ -10,4 +11,4 @@ export default defineConfig({
     // dedupe forces all React imports to resolve to one instance.
     dedupe: ['react', 'react-dom'],
   },
-})
+}))
