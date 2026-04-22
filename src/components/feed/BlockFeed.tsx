@@ -374,7 +374,7 @@ function BlockItem({
           : selected
             ? 'border-zinc-700 bg-zinc-900 ring-1 ring-blue-500/50'
           : 'border-zinc-800 bg-zinc-900/70'
-      } ${isDragging ? 'scale-[0.99] border-blue-600 bg-zinc-900 shadow-lg shadow-black/30' : ''}`}
+      } ${isDragging ? 'opacity-20 border-dashed border-violet-500/60 bg-violet-950/20' : ''}`}
     >
       <div className="absolute left-3 top-3 flex flex-col gap-2">
         <label

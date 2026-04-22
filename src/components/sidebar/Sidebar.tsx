@@ -432,8 +432,16 @@ function FolderRow({
   onDragEnd,
   draggingConversationId,
 }: FolderRowProps) {
+  if (isDragging) {
+    return (
+      <div data-drag-folder={folder.id} data-drag-id={folder.id}>
+        <div className="mx-2 my-1.5 h-0.5 rounded-full bg-violet-500/80" />
+      </div>
+    )
+  }
+
   return (
-    <div data-drag-folder={folder.id} data-drag-id={folder.id} className={isDragging ? 'opacity-40' : undefined}>
+    <div data-drag-folder={folder.id} data-drag-id={folder.id}>
       <div className="flex w-full items-center rounded text-left text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100">
         <button
           className="touch-none cursor-grab px-1 py-1.5 text-zinc-600 hover:text-zinc-400 active:cursor-grabbing"
@@ -518,14 +526,20 @@ function ConversationRow({
   onDragPointerMove: (event: React.PointerEvent<HTMLButtonElement>) => void
   onDragEnd: (event: React.PointerEvent<HTMLButtonElement>) => void
 }) {
+  if (isDragging) {
+    return (
+      <div data-drag-conv-scope={folderId} data-drag-id={conversation.id}>
+        <div className="mx-2 ml-7 my-1.5 h-0.5 rounded-full bg-violet-500/80" />
+      </div>
+    )
+  }
+
   return (
     <div
       data-drag-conv-scope={folderId}
       data-drag-id={conversation.id}
       className={`flex w-full items-center rounded py-1.5 pl-3 pr-2 text-sm ${
-        isDragging
-          ? 'opacity-40'
-          : selected
+        selected
           ? 'bg-zinc-800 text-zinc-100'
           : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
       }`}
