@@ -13,9 +13,10 @@ type Props = {
   userId: string
   selectedConversationId: string | null
   onSelectConversation: (id: string) => void
+  onClose: () => void
 }
 
-export function Sidebar({ userId, selectedConversationId, onSelectConversation }: Props) {
+export function Sidebar({ userId, selectedConversationId, onSelectConversation, onClose }: Props) {
   const [folders, setFolders] = useState<Folder[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -76,13 +77,22 @@ export function Sidebar({ userId, selectedConversationId, onSelectConversation }
         <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
           Conversations
         </span>
-        <button
-          onClick={() => setCreating({ type: 'folder' })}
-          title="New folder"
-          className="rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
-        >
-          <PlusIcon />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setCreating({ type: 'folder' })}
+            title="New folder"
+            className="rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+          >
+            <PlusIcon />
+          </button>
+          <button
+            onClick={onClose}
+            title="Hide sidebar"
+            className="rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+          >
+            <CloseIcon />
+          </button>
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto px-1 pb-4">
         {folders.length === 0 && creating?.type !== 'folder' ? (
@@ -259,6 +269,15 @@ function ChevronIcon({ collapsed }: { collapsed: boolean }) {
       ) : (
         <polyline points="2,4 6,8 10,4" />
       )}
+    </svg>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <line x1="2" y1="2" x2="10" y2="10" />
+      <line x1="10" y1="2" x2="2" y2="10" />
     </svg>
   )
 }
