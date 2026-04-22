@@ -24,8 +24,8 @@ A free-writing app that looks like an elaborate productivity system. The primary
 
 ## Stack (at a glance)
 
-- **Frontend:** PWA, single-page, vanilla JS or minimal framework. Installable on iOS (iPhone 8 baseline) and desktop browsers.
-- **Backend:** Supabase or Pocketbase — provides email/password auth, Postgres, realtime sync with no custom server code.
+- **Frontend:** React 19 + TypeScript + Vite 8 + Tailwind CSS v4. Single-page app, installable target still applies.
+- **Backend:** Supabase — email/password auth, Postgres, and realtime with no custom server.
 - **Storage:** Structured rows; Markdown is always the export/copy target, never the storage format.
 - **Auth:** Email + password, with email-based password reset.
 
@@ -64,8 +64,13 @@ See `docs/04-decisions.md` for the reasoning behind each of these.
 │   └── NOTES.md           ← scratchpad for in-flight thoughts
 ├── prototype/             ← working reference implementation (see docs/02)
 │   └── writing-app.html
-├── src/                   ← application code (not yet created)
-├── public/                ← static assets (not yet created)
+├── public/                ← static assets
+├── src/                   ← application code
+│   ├── app/
+│   ├── components/
+│   ├── db/
+│   ├── lib/
+│   └── styles/
 └── (build / config files at root)
 ```
 
