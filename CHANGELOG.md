@@ -12,9 +12,8 @@ Newest entries first. One line per change. Format:
 
 ## 2026-04-22
 
-- Add Composer component with Enter-to-send, Shift+Enter newline, divider detection, inline #hashtag parsing. (pending)
-- Add `src/lib/blocks.ts`, `tags.ts`, `conversations.ts` (minimal write-path lib layer). (pending)
-- Fix `src/db/types.ts` for `@supabase/postgrest-js` 2.104 (`Relationships`, `Views`, `Functions` fields). (pending)
+- Add Composer component with Enter-to-send, Shift+Enter newline, divider detection, inline #hashtag parsing. (6a23717)
+- Add `src/lib/blocks.ts`, `tags.ts`, `conversations.ts` (minimal write-path lib layer); fix `src/db/types.ts` for `@supabase/postgrest-js` 2.104. (21a101b)
 
 ## 2026-04-20
 
