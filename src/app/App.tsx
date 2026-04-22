@@ -189,6 +189,9 @@ function AppShell({ session }: { session: Session }) {
               conversationId={conversationId}
               highlightedBlockId={highlightedBlock?.blockId ?? null}
               highlightedBlockVersion={highlightedBlock?.version ?? 0}
+              onBlocksReordered={(nextBlocks) => {
+                setBlocks(nextBlocks)
+              }}
               onBlockUpdated={(updatedBlock) => {
                 setBlocks((prev) =>
                   prev.map((block) => (block.id === updatedBlock.id ? updatedBlock : block)),

@@ -8,6 +8,10 @@ export function createAppendPosition(): string {
   return Date.now().toString()
 }
 
+export function createSequentialPositions(count: number, startAt = Date.now()): string[] {
+  return Array.from({ length: count }, (_, index) => (startAt + index).toString())
+}
+
 export async function listBlocks(conversationId: string): Promise<Block[]> {
   const { data, error } = await supabase
     .from('blocks')
@@ -104,4 +108,35 @@ export async function moveBlockToConversation(params: {
   }
 
   return data
+}
+
+export async function reorderBlocks(blocks: Block[]): Promise<Block[]> {
+  if (blocks.length <= 1) return blocks
+
+  const positions = createSequentialPositions(blocks.length)
+  const updates = blocks.map((block, index) => ({
+    id: block.id,
+    user_id: block.user_id,
+    conversation_id: block.conversation_id,
+    type: block.type,
+    body: block.body,
+    position: positions[index],
+  }))
+
+  const { data, error } = await supabase
+    .from('blocks')
+    .upsert(updates, { onConflict: 'id' })
+    .select()
+
+  if (error) {
+    report('error', 'Failed to reorder blocks', error)
+    throw error
+  }
+
+  const rowsById = new Map(data.map((row) => [row.id, row]))
+
+  return updates.map((update) => rowsById.get(update.id) ?? {
+    ...blocks.find((block) => block.id === update.id)!,
+    position: update.position,
+  })
 }

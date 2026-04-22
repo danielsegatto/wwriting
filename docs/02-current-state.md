@@ -16,8 +16,9 @@
 - DB schema (`src/db/migrations/001_initial_schema.sql`) — all tables, indexes, `updated_at` triggers, and RLS policies matching `docs/03-data-model.md`. Run once in the Supabase SQL editor.
 - DB types (`src/db/types.ts`) — hand-written `Database` type for Supabase client inference. Regenerate with `npx supabase gen types typescript` after running migrations.
 - `src/lib/errors.ts` centralizes visible runtime reporting with `report('error' | 'warn' | 'info', ...)`, FIFO retention, subscribers for future UI, console mirroring, and one-time global `error` / `unhandledrejection` handlers. Activated at startup via `installGlobalErrorHandlers(window)` in `src/main.tsx`.
-- Block management in `src/components/feed/BlockFeed.tsx` — each Block has a local actions menu with a visible action button plus `double-click` / touch `long-press` shortcuts. Text Blocks can be edited inline with explicit save/cancel; any edit re-runs inline `#hashtag` reconciliation through `src/lib/tags.ts`. Text and divider Blocks can be moved to another Conversation via a picker or deleted via inline confirmation. Drag-to-sidebar and orphan-citation UI are still deferred.
+- Block management in `src/components/feed/BlockFeed.tsx` — each Block has a local actions menu with a visible action button plus `double-click` / touch `long-press` shortcuts. Text Blocks can be edited inline with explicit save/cancel; any edit re-runs inline `#hashtag` reconciliation through `src/lib/tags.ts`. Text and divider Blocks can be dragged to reorder within the current Conversation, moved to another Conversation via a picker, or deleted via inline confirmation. Blocks can also be multi-selected for bulk move/delete actions. Drag-to-sidebar and orphan-citation UI are still deferred.
 - Citations are live across the MVP writing loop. Typing `@` in `src/components/composer/Composer.tsx` at the start of input or after whitespace opens a citation picker over existing text Blocks, inserting raw `{{block:<uuid>}}` tokens into the body. `src/lib/references.ts` reconciles `block_references` on create/edit, and `src/lib/markdown.ts` renders citation pills in `src/components/feed/BlockFeed.tsx`. Clicking a citation pill jumps to the target Block, switching Conversations when needed and temporarily highlighting the destination Block. Missing targets render as `[deleted]`.
+- Tagging now has two authoring paths. Inline `#hashtag` text still reconciles on save, and the composer now opens a live tag picker while typing `#` so existing Tags can be inserted quickly or new Tags can be created from the current token before the Block is sent.
 
 ## Reference prototype
 
@@ -35,7 +36,7 @@ When building the real thing under `src/`:
 - [x] Supabase setup: client in `src/lib/supabase.ts`, typed via `src/db/types.ts`, migration at `src/db/migrations/001_initial_schema.sql` (see §017)
 - [x] Auth: `@supabase/auth-ui-react` `<Auth>` component gated behind `src/app/AuthGate.tsx`; email/password + forgot-password flow; `signOut()` helper in `src/lib/auth.ts` (see §018)
 - [x] Data model (migrations for folders, conversations, blocks, tags, block_tags, block_references, user_settings) — see §017
-- [x] Composer (`src/components/composer/Composer.tsx`): send on Enter, Shift+Enter newline, divider detection, inline #hashtag parsing → `block_tags` rows (see §019)
+- [x] Composer (`src/components/composer/Composer.tsx`): send on Enter, Shift+Enter newline, divider detection, inline #hashtag parsing → `block_tags` rows, plus live `#` tag suggestions/create flow while writing (see §019)
 - [x] Sidebar tree (folders nestable, conversations as leaves): `src/components/sidebar/Sidebar.tsx` — collapsible folders, conversation leaves, click-to-select. Data-fetching owned by the Sidebar itself (see §020).
 - [x] Block rendering (`src/components/feed/BlockFeed.tsx`): renders `text` blocks as Markdown (via `marked`), `divider` blocks as `<hr>`. Optimistic append on send; loads full history on mount via `listBlocks()`.
 - [x] Topic divider Blocks (send `---` → `type='divider'` — done in Composer, see §019)
@@ -46,11 +47,12 @@ When building the real thing under `src/`:
 - [x] Tag picker UI: block-level picker in `src/components/feed/BlockFeed.tsx`; applied tags render as pills below text Blocks, picker tags can be added/removed without touching inline `#hashtag` rows (see §022)
 - [x] Citation picker (`@` in composer → Block picker → insert `{{block:<uuid>}}`)
 - [x] Clickable citation pills (navigate + highlight target)
-- [ ] Drag-to-reorder Blocks within Conversation
+- [x] Drag-to-reorder Blocks within Conversation
 - [ ] Drag-to-reorder sidebar tree
 - [x] Move Block to another Conversation (picker in Block actions menu; drag-to-sidebar still deferred)
 - [x] Edit Block (visible action button plus double-click / long-press shortcut; text Blocks only)
 - [x] Delete Block (inline confirmation in Block actions menu; orphan-citation UI still deferred)
+- [x] Multi-select Blocks for bulk move/delete
 - [ ] Export Conversation as Markdown (download + copy)
 - [ ] Export full workspace as zip of `.md` files
 - [ ] Realtime sync (Supabase/Pocketbase subscription)

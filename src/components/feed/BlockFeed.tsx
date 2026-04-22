@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   createAppendPosition,
+  createSequentialPositions,
   deleteBlock,
   moveBlockToConversation,
+  reorderBlocks,
   updateBlock,
 } from '../../lib/blocks.ts'
 import type { Block } from '../../lib/blocks.ts'
@@ -39,6 +41,7 @@ type Props = {
   conversationId: string
   highlightedBlockId: string | null
   highlightedBlockVersion: number
+  onBlocksReordered: (blocks: Block[]) => void
   onBlockUpdated: (block: Block) => void
   onBlockRemoved: (blockId: string) => void
   onJumpToBlock: (target: CitationTarget) => void
@@ -48,6 +51,20 @@ type ActionMode = 'menu' | 'edit' | 'move' | 'delete'
 type ActionState = { blockId: string; mode: ActionMode } | null
 type BusyState = { blockId: string; kind: 'tag' | 'edit' | 'move' | 'delete' } | null
 type EditCitationPickerState = { blockId: string; insertionIndex: number } | null
+type BulkActionMode = 'move' | 'delete' | null
+type DragState = {
+  activeBlockId: string
+  conversationId: string
+  previewBlocks: Block[]
+} | null
+type OptimisticOrderState = {
+  conversationId: string
+  blocks: Block[]
+} | null
+type SelectionState = {
+  conversationId: string
+  blockIds: string[]
+} | null
 
 const pickerTagSource = 'picker' as const
 const maxTagSuggestions = 8
@@ -105,6 +122,27 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && Boolean(target.closest('button, input, textarea, a'))
 }
 
+function haveSameBlockOrder(left: Block[], right: Block[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((block, index) => block.id === right[index]?.id)
+  )
+}
+
+function moveBlockToIndex(blocks: Block[], blockId: string, targetIndex: number): Block[] {
+  const currentIndex = blocks.findIndex((block) => block.id === blockId)
+  if (currentIndex === -1) return blocks
+
+  const clampedTargetIndex = Math.max(0, Math.min(targetIndex, blocks.length - 1))
+  if (currentIndex === clampedTargetIndex) return blocks
+
+  const nextBlocks = [...blocks]
+  const [movedBlock] = nextBlocks.splice(currentIndex, 1)
+  nextBlocks.splice(clampedTargetIndex, 0, movedBlock)
+
+  return nextBlocks
+}
+
 function BlockItem({
   block,
   tags,
@@ -123,8 +161,17 @@ function BlockItem({
   editCitationCandidates,
   editCursorPosition,
   blockBusy,
+  selected,
+  selectionDisabled,
+  isDragging,
+  dragDisabled,
   suggestions,
   canCreateTag,
+  onToggleSelected,
+  onDragHandlePointerDown,
+  onDragHandlePointerMove,
+  onDragHandlePointerUp,
+  onDragHandlePointerCancel,
   onOpenActionMenu,
   onCloseAction,
   onOpenPicker,
@@ -163,8 +210,17 @@ function BlockItem({
   editCitationCandidates: CitationCandidate[]
   editCursorPosition: number | null
   blockBusy: 'tag' | 'edit' | 'move' | 'delete' | null
+  selected: boolean
+  selectionDisabled: boolean
+  isDragging: boolean
+  dragDisabled: boolean
   suggestions: Tag[]
   canCreateTag: boolean
+  onToggleSelected: () => void
+  onDragHandlePointerDown: (event: React.PointerEvent<HTMLButtonElement>) => void
+  onDragHandlePointerMove: (event: React.PointerEvent<HTMLButtonElement>) => void
+  onDragHandlePointerUp: (event: React.PointerEvent<HTMLButtonElement>) => void
+  onDragHandlePointerCancel: (event: React.PointerEvent<HTMLButtonElement>) => void
   onOpenActionMenu: () => void
   onCloseAction: () => void
   onOpenPicker: () => void
@@ -315,9 +371,46 @@ function BlockItem({
       className={`relative scroll-mt-24 rounded-2xl border px-4 py-3 transition ${
         highlighted
           ? 'border-blue-700 bg-blue-950/25 ring-1 ring-blue-500/80'
+          : selected
+            ? 'border-zinc-700 bg-zinc-900 ring-1 ring-blue-500/50'
           : 'border-zinc-800 bg-zinc-900/70'
-      }`}
+      } ${isDragging ? 'scale-[0.99] border-blue-600 bg-zinc-900 shadow-lg shadow-black/30' : ''}`}
     >
+      <div className="absolute left-3 top-3 flex flex-col gap-2">
+        <label
+          className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border transition ${
+            selected
+              ? 'border-blue-500 bg-blue-600 text-white'
+              : 'border-zinc-700 bg-zinc-900 text-zinc-500 hover:border-zinc-600 hover:text-zinc-200'
+          } ${selectionDisabled ? 'cursor-not-allowed opacity-50' : ''}`}
+          aria-label={selected ? 'Deselect block' : 'Select block'}
+          title={selected ? 'Deselect block' : 'Select block'}
+        >
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelected}
+            disabled={selectionDisabled}
+            className="sr-only"
+          />
+          <CheckIcon />
+        </label>
+        <button
+          type="button"
+          onPointerDown={onDragHandlePointerDown}
+          onPointerMove={onDragHandlePointerMove}
+          onPointerUp={onDragHandlePointerUp}
+          onPointerCancel={onDragHandlePointerCancel}
+          onLostPointerCapture={onDragHandlePointerCancel}
+          onClick={(event) => event.preventDefault()}
+          disabled={dragDisabled}
+          className="touch-none rounded-full border border-zinc-700 p-2 text-zinc-400 transition hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label="Drag block to reorder"
+          title="Drag block to reorder"
+        >
+          <GripIcon />
+        </button>
+      </div>
       <div className="absolute right-3 top-3 flex items-center gap-2">
         {blockBusy && (
           <span className="text-[11px] uppercase tracking-wide text-zinc-500">
@@ -335,7 +428,7 @@ function BlockItem({
         </button>
       </div>
 
-      {actionMode === 'menu' && (
+        {actionMode === 'menu' && (
         <div className="absolute right-3 top-14 z-20 w-40 rounded-2xl border border-zinc-700 bg-zinc-900 p-1.5 shadow-2xl shadow-black/40">
           {block.type === 'text' && <ActionMenuButton label="Edit block" onClick={onStartEdit} />}
           <ActionMenuButton label="Move block" onClick={onStartMove} />
@@ -419,11 +512,14 @@ function BlockItem({
       )}
 
       {block.type === 'divider' ? (
-        <div className="py-3 pr-14">
+        <div className="py-3 pl-12 pr-14">
+          <div className="sr-only" aria-live="polite">
+            {selected ? 'Selected' : 'Not selected'}
+          </div>
           <hr className="border-zinc-700" />
         </div>
       ) : actionMode === 'edit' ? (
-        <div className="pr-14">
+        <div className="pl-12 pr-14">
           <textarea
             ref={editTextareaRef}
             autoFocus
@@ -532,10 +628,10 @@ function BlockItem({
         <>
           <div
             onClick={handleBodyClick}
-            className="pr-14 prose prose-invert prose-sm max-w-none text-zinc-100 [&_a]:text-blue-400 [&_code]:text-zinc-300 [&_pre]:bg-zinc-800"
+            className="prose prose-invert prose-sm max-w-none pl-12 pr-14 text-zinc-100 [&_a]:text-blue-400 [&_code]:text-zinc-300 [&_pre]:bg-zinc-800"
             dangerouslySetInnerHTML={{ __html: renderedBody }}
           />
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2 pl-12">
             {tags.map((tag) => {
               const pickerApplied = tag.sources.includes(pickerTagSource)
 
@@ -635,12 +731,20 @@ export function BlockFeed({
   conversationId,
   highlightedBlockId,
   highlightedBlockVersion,
+  onBlocksReordered,
   onBlockUpdated,
   onBlockRemoved,
   onJumpToBlock,
 }: Props) {
+  const listRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const prevLenRef = useRef(blocks.length)
+  const blocksRef = useRef(blocks)
+  const dragSessionRef = useRef<{
+    activeBlockId: string
+    pointerId: number
+    previewBlocks: Block[]
+  } | null>(null)
   const [availableTags, setAvailableTags] = useState<Tag[]>([])
   const [folders, setFolders] = useState<Folder[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -659,6 +763,16 @@ export function BlockFeed({
   const [actionState, setActionState] = useState<ActionState>(null)
   const [busyState, setBusyState] = useState<BusyState>(null)
   const [editValue, setEditValue] = useState('')
+  const [selectionState, setSelectionState] = useState<SelectionState>(null)
+  const [bulkActionMode, setBulkActionMode] = useState<BulkActionMode>(null)
+  const [bulkBusyKind, setBulkBusyKind] = useState<'move' | 'delete' | null>(null)
+  const [dragState, setDragState] = useState<DragState>(null)
+  const [optimisticOrder, setOptimisticOrder] = useState<OptimisticOrderState>(null)
+  const [reorderBusyBlockId, setReorderBusyBlockId] = useState<string | null>(null)
+
+  useEffect(() => {
+    blocksRef.current = blocks
+  }, [blocks])
 
   useEffect(() => {
     if (blocks.length > prevLenRef.current) {
@@ -796,6 +910,59 @@ export function BlockFeed({
           .slice(0, maxTagSuggestions)
   const hasExactSuggestion = availableTags.some((tag) => tag.name === normalizedPickerQuery)
   const canCreateTag = normalizedPickerQuery !== '' && !hasExactSuggestion
+  const activeDragBlocks =
+    dragState?.conversationId === conversationId ? dragState.previewBlocks : null
+  const activeOptimisticBlocks =
+    optimisticOrder?.conversationId === conversationId &&
+    !haveSameBlockOrder(optimisticOrder.blocks, blocks)
+      ? optimisticOrder.blocks
+      : null
+  const displayBlocks = activeDragBlocks ?? activeOptimisticBlocks ?? blocks
+  const activeSelectedBlockIds =
+    selectionState?.conversationId === conversationId ? selectionState.blockIds : []
+  const selectedBlockIdSet = new Set(activeSelectedBlockIds)
+  const selectedBlocks = displayBlocks.filter((block) => selectedBlockIdSet.has(block.id))
+  const activeBulkActionMode = selectedBlocks.length > 0 ? bulkActionMode : null
+  const bulkMoveDestinations = conversations.filter((conversation) => conversation.id !== conversationId)
+  const selectionLocked = Boolean(busyState || reorderBusyBlockId || bulkBusyKind)
+
+  function resetTransientUi() {
+    setPickerBlockId(null)
+    setPickerQuery('')
+    setEditCitationPicker(null)
+    setEditCitationQuery('')
+    setEditCitationCandidates([])
+    setEditCitationBusy(false)
+    setEditCursorPosition(null)
+    setActionState(null)
+    setBulkActionMode(null)
+    setEditValue('')
+  }
+
+  function clearSelection() {
+    setSelectionState(null)
+    setBulkActionMode(null)
+  }
+
+  function toggleSelectedBlock(blockId: string) {
+    if (selectionLocked) return
+
+    const currentIds = selectionState?.conversationId === conversationId ? selectionState.blockIds : []
+    const nextIds = currentIds.includes(blockId)
+      ? currentIds.filter((id) => id !== blockId)
+      : [...currentIds, blockId]
+
+    if (nextIds.length === 0) {
+      setSelectionState(null)
+      setBulkActionMode(null)
+      return
+    }
+
+    setSelectionState({
+      conversationId,
+      blockIds: nextIds,
+    })
+  }
 
   async function refreshAvailableTags() {
     const nextTags = await listTags(userId)
@@ -811,13 +978,7 @@ export function BlockFeed({
   }
 
   function openAction(block: Block, mode: ActionMode) {
-    setPickerBlockId(null)
-    setPickerQuery('')
-    setEditCitationPicker(null)
-    setEditCitationQuery('')
-    setEditCitationCandidates([])
-    setEditCitationBusy(false)
-    setEditCursorPosition(null)
+    resetTransientUi()
     setActionState({ blockId: block.id, mode })
     setEditValue(mode === 'edit' ? block.body ?? '' : '')
   }
@@ -877,6 +1038,104 @@ export function BlockFeed({
     )
     setEditCursorPosition({ blockId, position: nextCursorPosition })
     closeEditCitationPicker(blockId)
+  }
+
+  function getDropIndex(pointerY: number, activeBlockId: string): number {
+    const items = Array.from(
+      listRef.current?.querySelectorAll<HTMLElement>('[data-block-id]') ?? [],
+    ).filter((item) => item.dataset.blockId !== activeBlockId)
+
+    for (const [index, item] of items.entries()) {
+      const rect = item.getBoundingClientRect()
+      const midpoint = rect.top + rect.height / 2
+      if (pointerY < midpoint) return index
+    }
+
+    return items.length
+  }
+
+  async function persistBlockOrder(nextBlocks: Block[], activeBlockId: string) {
+    setReorderBusyBlockId(activeBlockId)
+    try {
+      const reorderedBlocks = await reorderBlocks(nextBlocks)
+      setOptimisticOrder({
+        conversationId,
+        blocks: reorderedBlocks,
+      })
+      onBlocksReordered(reorderedBlocks)
+    } catch (error) {
+      setOptimisticOrder(null)
+      report('error', 'Failed to reorder blocks', error)
+    } finally {
+      setReorderBusyBlockId((current) => (current === activeBlockId ? null : current))
+    }
+  }
+
+  function handleDragHandlePointerDown(block: Block, event: React.PointerEvent<HTMLButtonElement>) {
+    if (busyState || reorderBusyBlockId || bulkBusyKind) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    resetTransientUi()
+
+    const previewBlocks =
+      optimisticOrder?.conversationId === conversationId ? optimisticOrder.blocks : blocksRef.current
+    dragSessionRef.current = {
+      activeBlockId: block.id,
+      pointerId: event.pointerId,
+      previewBlocks,
+    }
+    setDragState({
+      activeBlockId: block.id,
+      conversationId,
+      previewBlocks,
+    })
+  }
+
+  function handleDragHandlePointerMove(event: React.PointerEvent<HTMLButtonElement>) {
+    const session = dragSessionRef.current
+    if (!session || session.pointerId !== event.pointerId) return
+
+    event.preventDefault()
+    const nextPreviewBlocks = moveBlockToIndex(
+      session.previewBlocks,
+      session.activeBlockId,
+      getDropIndex(event.clientY, session.activeBlockId),
+    )
+
+    if (haveSameBlockOrder(nextPreviewBlocks, session.previewBlocks)) return
+
+    session.previewBlocks = nextPreviewBlocks
+    setDragState({
+      activeBlockId: session.activeBlockId,
+      conversationId,
+      previewBlocks: nextPreviewBlocks,
+    })
+  }
+
+  function finishDrag(event: React.PointerEvent<HTMLButtonElement>) {
+    const session = dragSessionRef.current
+    if (!session || session.pointerId !== event.pointerId) return
+
+    dragSessionRef.current = null
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    const nextPreviewBlocks = session.previewBlocks
+    const currentBlocks =
+      optimisticOrder?.conversationId === conversationId ? optimisticOrder.blocks : blocksRef.current
+
+    setDragState(null)
+
+    if (haveSameBlockOrder(nextPreviewBlocks, currentBlocks)) return
+
+    setOptimisticOrder({
+      conversationId,
+      blocks: nextPreviewBlocks,
+    })
+    void persistBlockOrder(nextPreviewBlocks, session.activeBlockId)
   }
 
   async function handleAddTag(blockId: string, rawName: string) {
@@ -1040,6 +1299,76 @@ export function BlockFeed({
     }
   }
 
+  async function handleMoveSelectedBlocks(destinationConversationId: string) {
+    if (selectedBlocks.length === 0 || destinationConversationId === conversationId) {
+      setBulkActionMode(null)
+      return
+    }
+
+    const positions = createSequentialPositions(selectedBlocks.length)
+
+    setBulkBusyKind('move')
+    try {
+      await Promise.all(
+        selectedBlocks.map((block, index) =>
+          moveBlockToConversation({
+            blockId: block.id,
+            conversationId: destinationConversationId,
+            position: positions[index],
+          }),
+        ),
+      )
+
+      setTagsByBlockId((prev) => {
+        const next = { ...prev }
+        for (const block of selectedBlocks) {
+          delete next[block.id]
+        }
+        return next
+      })
+
+      for (const block of selectedBlocks) {
+        onBlockRemoved(block.id)
+      }
+
+      clearSelection()
+    } catch (error) {
+      report('error', 'Failed to move selected blocks', error)
+    } finally {
+      setBulkBusyKind(null)
+    }
+  }
+
+  async function handleDeleteSelectedBlocks() {
+    if (selectedBlocks.length === 0) {
+      setBulkActionMode(null)
+      return
+    }
+
+    setBulkBusyKind('delete')
+    try {
+      await Promise.all(selectedBlocks.map((block) => deleteBlock(block.id)))
+
+      setTagsByBlockId((prev) => {
+        const next = { ...prev }
+        for (const block of selectedBlocks) {
+          delete next[block.id]
+        }
+        return next
+      })
+
+      for (const block of selectedBlocks) {
+        onBlockRemoved(block.id)
+      }
+
+      clearSelection()
+    } catch (error) {
+      report('error', 'Failed to delete selected blocks', error)
+    } finally {
+      setBulkBusyKind(null)
+    }
+  }
+
   if (blocks.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -1050,8 +1379,128 @@ export function BlockFeed({
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-4">
-      <div className="mx-auto max-w-2xl space-y-3">
-        {blocks.map((block) => (
+      <div ref={listRef} className="mx-auto max-w-2xl space-y-3">
+        {selectedBlocks.length > 0 && (
+          <div className="sticky top-0 z-20 rounded-3xl border border-zinc-700 bg-zinc-900/95 p-3 shadow-2xl shadow-black/30 backdrop-blur">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-zinc-100">
+                  {selectedBlocks.length} {selectedBlocks.length === 1 ? 'block' : 'blocks'} selected
+                </p>
+                <p className="text-xs text-zinc-500">
+                  Move or delete the current selection.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBulkActionMode((current) => (current === 'move' ? null : 'move'))}
+                  disabled={selectionLocked}
+                  className="rounded-full border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:border-zinc-600 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Move
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBulkActionMode((current) => (current === 'delete' ? null : 'delete'))}
+                  disabled={selectionLocked}
+                  className="rounded-full border border-red-900/70 px-3 py-1.5 text-sm text-red-300 hover:bg-red-950/40 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  disabled={selectionLocked}
+                  className="rounded-full border border-zinc-700 px-3 py-1.5 text-sm text-zinc-400 hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            {activeBulkActionMode === 'move' && (
+              <div className="mt-3 rounded-2xl border border-zinc-700 bg-zinc-950/70 p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-zinc-100">Move selected blocks</p>
+                  <button
+                    type="button"
+                    onClick={() => setBulkActionMode(null)}
+                    className="rounded-full p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+                    aria-label="Close bulk move picker"
+                  >
+                    <CloseIcon />
+                  </button>
+                </div>
+                {bulkMoveDestinations.length === 0 ? (
+                  <p className="rounded-xl bg-zinc-950 px-3 py-2 text-sm text-zinc-500">
+                    No other conversations yet.
+                  </p>
+                ) : (
+                  <div className="max-h-64 space-y-3 overflow-y-auto">
+                    {folders.map((folder) => {
+                      const folderConversations = bulkMoveDestinations.filter(
+                        (conversation) => conversation.folder_id === folder.id,
+                      )
+                      if (folderConversations.length === 0) return null
+
+                      return (
+                        <div key={folder.id}>
+                          <p className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                            {folder.name}
+                          </p>
+                          <div className="space-y-1">
+                            {folderConversations.map((conversation) => (
+                              <button
+                                key={conversation.id}
+                                type="button"
+                                onClick={() => void handleMoveSelectedBlocks(conversation.id)}
+                                disabled={Boolean(bulkBusyKind)}
+                                className="w-full rounded-xl px-3 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {conversation.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeBulkActionMode === 'delete' && (
+              <div className="mt-3 rounded-2xl border border-red-900/80 bg-zinc-950/70 p-3">
+                <p className="text-sm text-zinc-100">
+                  Delete {selectedBlocks.length} {selectedBlocks.length === 1 ? 'selected block' : 'selected blocks'}?
+                </p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  This removes the selected blocks from the current conversation.
+                </p>
+                <div className="mt-3 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBulkActionMode(null)}
+                    disabled={Boolean(bulkBusyKind)}
+                    className="rounded-full border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteSelectedBlocks()}
+                    disabled={Boolean(bulkBusyKind)}
+                    className="rounded-full bg-red-700 px-3 py-1.5 text-sm text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Delete selected
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {displayBlocks.map((block) => (
           <BlockItem
             key={block.id}
             block={block}
@@ -1072,9 +1521,31 @@ export function BlockFeed({
               activeEditCitationPicker?.blockId === block.id ? editCitationCandidates : []
             }
             editCursorPosition={editCursorPosition?.blockId === block.id ? editCursorPosition.position : null}
-            blockBusy={busyState?.blockId === block.id ? busyState.kind : null}
+            blockBusy={
+              busyState?.blockId === block.id
+                ? busyState.kind
+                : selectedBlockIdSet.has(block.id) && bulkBusyKind
+                  ? bulkBusyKind
+                : reorderBusyBlockId === block.id
+                  ? 'move'
+                  : null
+            }
+            selected={selectedBlockIdSet.has(block.id)}
+            selectionDisabled={selectionLocked}
+            isDragging={dragState?.activeBlockId === block.id}
+            dragDisabled={Boolean(
+              busyState ||
+              bulkBusyKind ||
+              reorderBusyBlockId ||
+              (activeActionState?.blockId === block.id && activeActionState.mode === 'edit'),
+            )}
             suggestions={suggestions}
             canCreateTag={canCreateTag}
+            onToggleSelected={() => toggleSelectedBlock(block.id)}
+            onDragHandlePointerDown={(event) => handleDragHandlePointerDown(block, event)}
+            onDragHandlePointerMove={handleDragHandlePointerMove}
+            onDragHandlePointerUp={finishDrag}
+            onDragHandlePointerCancel={finishDrag}
             onOpenActionMenu={() => openAction(block, 'menu')}
             onCloseAction={() => closeAction(block.id)}
             onOpenPicker={() => {
@@ -1156,6 +1627,27 @@ function CloseIcon() {
     <svg className="h-4 w-4" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
       <line x1="2" y1="2" x2="10" y2="10" />
       <line x1="10" y1="2" x2="2" y2="10" />
+    </svg>
+  )
+}
+
+function GripIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <circle cx="5" cy="4" r="1" />
+      <circle cx="11" cy="4" r="1" />
+      <circle cx="5" cy="8" r="1" />
+      <circle cx="11" cy="8" r="1" />
+      <circle cx="5" cy="12" r="1" />
+      <circle cx="11" cy="12" r="1" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="3.5 8.5 6.5 11.5 12.5 5.5" />
     </svg>
   )
 }
