@@ -70,7 +70,7 @@ Blocks are ordered by `position`, not `created_at`. Even if the two happen to ma
 
 ### Confirmation dialogs for delete
 
-Delete is delete, no modal confirm. The user knows what they're doing. Undo is the correct pattern (deferred; see `docs/02-current-state.md`). A "type DELETE to confirm" dialog is the wrong pattern.
+Custom destructive-confirmation flows remain out of scope. The current app uses the browser's built-in confirmation prompt before deleting a Folder or Conversation. A heavier "type DELETE to confirm" flow is still the wrong pattern.
 
 ### Limiting body length
 

@@ -164,7 +164,7 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - Fractional indexing from day one: premature until drag-to-reorder is built. `Date.now().toString()` sorts lexicographically and is correct for append-only creation.
 - App-shell-first: no writing happens until the Composer is wired.
 **Consequences:**
-- `src/lib/blocks.ts`, `src/lib/tags.ts`, `src/lib/conversations.ts` exist as thin Supabase wrappers. Full CRUD (list, update, delete) is not yet present.
+- `src/lib/blocks.ts`, `src/lib/tags.ts`, `src/lib/conversations.ts` exist as thin Supabase wrappers. Conversation helpers now cover bootstrap/list/create/delete; broader CRUD is still intentionally incomplete.
 - `ensureDefaultConversation` in `src/lib/conversations.ts` bootstraps a "Journal / My Notes" folder+conversation on first login. This is a one-time bootstrap helper, not a user-facing concept.
 - `AuthGate` now takes a render-prop `children: (session: Session) => ReactNode` so `App.tsx` can access the session without a second auth listener.
 - `src/db/types.ts` was updated to add `Relationships: []` to each table and `Views`/`Functions` to the public schema — required by `@supabase/postgrest-js` 2.104 which changed `GenericTable` and `GenericSchema` to require these fields.

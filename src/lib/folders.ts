@@ -37,3 +37,15 @@ export async function createFolder(
 
   return data
 }
+
+export async function deleteFolder(folderId: string): Promise<void> {
+  const { error } = await supabase
+    .from('folders')
+    .delete()
+    .eq('id', folderId)
+
+  if (error) {
+    report('error', 'Failed to delete folder', error)
+    throw error
+  }
+}

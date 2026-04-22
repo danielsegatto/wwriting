@@ -39,6 +39,8 @@ When building the real thing under `src/`:
 - [x] Topic divider Blocks (send `---` → `type='divider'` — done in Composer, see §019)
 - [x] Inline `#hashtag` parsing → `block_tags` rows (done in Composer, see §019)
 - [x] Create Folder / Conversation from sidebar: inline input in sidebar tree; Enter confirms, Escape/blur cancels; auto-navigate on conversation creation (see §021).
+- [x] Delete Folder / Conversation from sidebar: delete controls live in the sidebar tree; deleting a Folder cascades to its child Conversations via the existing foreign keys; if the selected Conversation is deleted, selection falls back to another Conversation or clears when none remain.
+- [x] Delete confirmation: deleting a Folder or Conversation requires a browser confirmation prompt before the destructive action runs.
 - [ ] Tag picker UI (explicit tag assignment)
 - [ ] Citation picker (`@` in composer → Block picker → insert `{{block:<uuid>}}`)
 - [ ] Clickable citation pills (navigate + highlight target)

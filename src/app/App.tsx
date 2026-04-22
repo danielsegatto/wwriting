@@ -42,7 +42,6 @@ function AppShell({ session }: { session: Session }) {
   // Reload blocks whenever the selected conversation changes
   useEffect(() => {
     if (!conversationId) return
-    setBlocks([])
     listBlocks(conversationId)
       .then(setBlocks)
       .catch((err) => report('error', 'Failed to load blocks', err))
@@ -53,7 +52,13 @@ function AppShell({ session }: { session: Session }) {
   }, [])
 
   const handleSelectConversation = useCallback((id: string) => {
+    setBlocks([])
     setConversationId(id)
+  }, [])
+
+  const handleConversationDeleted = useCallback((nextConversationId: string | null) => {
+    setConversationId(nextConversationId)
+    setBlocks([])
   }, [])
 
   return (
@@ -63,6 +68,7 @@ function AppShell({ session }: { session: Session }) {
           userId={session.user.id}
           selectedConversationId={conversationId}
           onSelectConversation={(id) => { handleSelectConversation(id); setSidebarOpen(false) }}
+          onConversationDeleted={handleConversationDeleted}
           onClose={() => setSidebarOpen(false)}
         />
       )}

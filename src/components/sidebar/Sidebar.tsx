@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { listFolders, createFolder } from '../../lib/folders.ts'
-import { listConversations, createConversation } from '../../lib/conversations.ts'
+import { listFolders, createFolder, deleteFolder } from '../../lib/folders.ts'
+import { listConversations, createConversation, deleteConversation } from '../../lib/conversations.ts'
 import type { Folder } from '../../lib/folders.ts'
 import type { Conversation } from '../../lib/conversations.ts'
 
@@ -13,10 +13,17 @@ type Props = {
   userId: string
   selectedConversationId: string | null
   onSelectConversation: (id: string) => void
+  onConversationDeleted: (nextConversationId: string | null) => void
   onClose: () => void
 }
 
-export function Sidebar({ userId, selectedConversationId, onSelectConversation, onClose }: Props) {
+export function Sidebar({
+  userId,
+  selectedConversationId,
+  onSelectConversation,
+  onConversationDeleted,
+  onClose,
+}: Props) {
   const [folders, setFolders] = useState<Folder[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -71,6 +78,68 @@ export function Sidebar({ userId, selectedConversationId, onSelectConversation, 
     }
   }, [creating, userId, onSelectConversation])
 
+  const handleDeleteConversation = useCallback(async (conversationId: string) => {
+    const conversation = conversations.find((item) => item.id === conversationId)
+    if (!conversation) return
+
+    const confirmed = window.confirm(`Delete conversation "${conversation.name}"?`)
+    if (!confirmed) return
+
+    const nextConversationId = getNextConversationIdAfterConversationDelete(
+      conversations,
+      conversationId,
+      selectedConversationId,
+    )
+
+    try {
+      await deleteConversation(conversationId)
+      setConversations((prev) => prev.filter((conversation) => conversation.id !== conversationId))
+      if (selectedConversationId === conversationId) onConversationDeleted(nextConversationId)
+    } catch {
+      // already reported inside deleteConversation
+    }
+  }, [conversations, selectedConversationId, onConversationDeleted])
+
+  const handleDeleteFolder = useCallback(async (folderId: string) => {
+    const folder = folders.find((item) => item.id === folderId)
+    if (!folder) return
+
+    const folderIdsToDelete = getDescendantFolderIds(folders, folderId)
+    const conversationsToDelete = conversations.filter((conversation) =>
+      folderIdsToDelete.has(conversation.folder_id),
+    )
+    const conversationLabel = conversationsToDelete.length === 1 ? 'conversation' : 'conversations'
+    const confirmed = window.confirm(
+      `Delete folder "${folder.name}" and ${conversationsToDelete.length} ${conversationLabel} inside it?`,
+    )
+    if (!confirmed) return
+
+    const nextConversationId = getNextConversationIdAfterFolderDelete(
+      conversations,
+      folderIdsToDelete,
+      selectedConversationId,
+    )
+
+    try {
+      await deleteFolder(folderId)
+      setFolders((prev) => prev.filter((folder) => !folderIdsToDelete.has(folder.id)))
+      setConversations((prev) => prev.filter((conversation) => !folderIdsToDelete.has(conversation.folder_id)))
+      setCollapsed((prev) => {
+        const next = new Set(prev)
+        folderIdsToDelete.forEach((id) => next.delete(id))
+        return next
+      })
+      if (selectedConversationId && conversations.some(
+        (conversation) =>
+          conversation.id === selectedConversationId && folderIdsToDelete.has(conversation.folder_id),
+      )) {
+        onConversationDeleted(nextConversationId)
+      }
+    } catch {
+      // already reported inside deleteFolder
+    }
+  }, [folders, conversations, selectedConversationId, onConversationDeleted])
+
   return (
     <div className="flex h-screen w-56 flex-shrink-0 flex-col border-r border-zinc-800 bg-zinc-900">
       <div className="flex items-center justify-between px-3 py-3">
@@ -108,8 +177,10 @@ export function Sidebar({ userId, selectedConversationId, onSelectConversation, 
               onToggle={toggleCollapse}
               onSelectConversation={onSelectConversation}
               onCreateConversation={() => setCreating({ type: 'conversation', folderId: folder.id })}
+              onDeleteFolder={handleDeleteFolder}
               creatingConversation={creating?.type === 'conversation' && creating.folderId === folder.id}
               onConversationCreated={handleCreateConversation}
+              onDeleteConversation={handleDeleteConversation}
               onCancelCreate={() => setCreating(null)}
             />
           ))
@@ -134,8 +205,10 @@ type FolderRowProps = {
   onToggle: (id: string) => void
   onSelectConversation: (id: string) => void
   onCreateConversation: () => void
+  onDeleteFolder: (id: string) => void
   creatingConversation: boolean
   onConversationCreated: (name: string) => void
+  onDeleteConversation: (id: string) => void
   onCancelCreate: () => void
 }
 
@@ -147,8 +220,10 @@ function FolderRow({
   onToggle,
   onSelectConversation,
   onCreateConversation,
+  onDeleteFolder,
   creatingConversation,
   onConversationCreated,
+  onDeleteConversation,
   onCancelCreate,
 }: FolderRowProps) {
   return (
@@ -167,6 +242,14 @@ function FolderRow({
         >
           <PlusIcon />
         </span>
+        <span
+          role="button"
+          onClick={(e) => { e.stopPropagation(); onDeleteFolder(folder.id) }}
+          className="rounded p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+          title="Delete folder"
+        >
+          <TrashIcon />
+        </span>
       </button>
       {!collapsed &&
         conversations.map((conv) => (
@@ -175,6 +258,7 @@ function FolderRow({
             conversation={conv}
             selected={conv.id === selectedConversationId}
             onSelect={onSelectConversation}
+            onDelete={onDeleteConversation}
           />
         ))}
       {!collapsed && creatingConversation && (
@@ -193,23 +277,80 @@ function ConversationRow({
   conversation,
   selected,
   onSelect,
+  onDelete,
 }: {
   conversation: Conversation
   selected: boolean
   onSelect: (id: string) => void
+  onDelete: (id: string) => void
 }) {
   return (
-    <button
-      onClick={() => onSelect(conversation.id)}
-      className={`flex w-full items-center rounded py-1.5 pl-6 pr-2 text-left text-sm truncate ${
+    <div
+      className={`flex w-full items-center rounded py-1.5 pl-6 pr-2 text-sm ${
         selected
           ? 'bg-zinc-800 text-zinc-100'
           : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
       }`}
     >
-      {conversation.name}
-    </button>
+      <button
+        onClick={() => onSelect(conversation.id)}
+        className="min-w-0 flex-1 truncate text-left"
+      >
+        {conversation.name}
+      </button>
+      <button
+        onClick={() => onDelete(conversation.id)}
+        className="ml-2 rounded p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+        title="Delete conversation"
+      >
+        <TrashIcon />
+      </button>
+    </div>
   )
+}
+
+function getDescendantFolderIds(folders: Folder[], rootFolderId: string): Set<string> {
+  const folderIds = new Set<string>([rootFolderId])
+  let changed = true
+
+  while (changed) {
+    changed = false
+    for (const folder of folders) {
+      if (folder.parent_id && folderIds.has(folder.parent_id) && !folderIds.has(folder.id)) {
+        folderIds.add(folder.id)
+        changed = true
+      }
+    }
+  }
+
+  return folderIds
+}
+
+function getNextConversationIdAfterConversationDelete(
+  conversations: Conversation[],
+  conversationId: string,
+  selectedConversationId: string | null,
+): string | null {
+  if (selectedConversationId !== conversationId) return selectedConversationId
+
+  const remaining = conversations.filter((conversation) => conversation.id !== conversationId)
+  return remaining[0]?.id ?? null
+}
+
+function getNextConversationIdAfterFolderDelete(
+  conversations: Conversation[],
+  folderIdsToDelete: Set<string>,
+  selectedConversationId: string | null,
+): string | null {
+  if (!selectedConversationId) return null
+
+  const selectedConversation = conversations.find((conversation) => conversation.id === selectedConversationId)
+  if (!selectedConversation || !folderIdsToDelete.has(selectedConversation.folder_id)) {
+    return selectedConversationId
+  }
+
+  const remaining = conversations.filter((conversation) => !folderIdsToDelete.has(conversation.folder_id))
+  return remaining[0]?.id ?? null
 }
 
 function InlineInput({
@@ -294,6 +435,27 @@ function PlusIcon() {
     >
       <line x1="6" y1="2" x2="6" y2="10" />
       <line x1="2" y1="6" x2="10" y2="6" />
+    </svg>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      className="h-3 w-3"
+      viewBox="0 0 12 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M2.5 3.5h7" />
+      <path d="M4.5 2h3" />
+      <path d="M4 5v3.5" />
+      <path d="M6 5v3.5" />
+      <path d="M8 5v3.5" />
+      <path d="M3.5 3.5v5.5a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1V3.5" />
     </svg>
   )
 }

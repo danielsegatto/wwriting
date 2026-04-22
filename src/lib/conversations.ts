@@ -38,6 +38,18 @@ export async function createConversation(
   return data
 }
 
+export async function deleteConversation(conversationId: string): Promise<void> {
+  const { error } = await supabase
+    .from('conversations')
+    .delete()
+    .eq('id', conversationId)
+
+  if (error) {
+    report('error', 'Failed to delete conversation', error)
+    throw error
+  }
+}
+
 export async function ensureDefaultConversation(userId: string): Promise<string> {
   const { data: existing, error: fetchError } = await supabase
     .from('conversations')
