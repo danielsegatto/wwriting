@@ -1,4 +1,4 @@
-# writing-app
+# Wwriting-app
 
 Personal writing tool. Single user (the repo owner). Not intended for distribution.
 
