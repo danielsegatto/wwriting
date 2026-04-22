@@ -4,7 +4,7 @@ import { AuthGate } from './AuthGate.tsx'
 import { Composer } from '../components/composer/Composer.tsx'
 import { BlockFeed } from '../components/feed/BlockFeed.tsx'
 import { Sidebar } from '../components/sidebar/Sidebar.tsx'
-import { ensureDefaultConversation } from '../lib/conversations.ts'
+import { ensureDefaultConversation, getConversation } from '../lib/conversations.ts'
 import { listBlocks } from '../lib/blocks.ts'
 import type { Block } from '../lib/blocks.ts'
 import { report } from '../lib/errors.ts'
@@ -29,6 +29,7 @@ export function App() {
 
 function AppShell({ session }: { session: Session }) {
   const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversationTitle, setConversationTitle] = useState<string>('—')
   const [blocks, setBlocks] = useState<Block[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
@@ -47,16 +48,38 @@ function AppShell({ session }: { session: Session }) {
       .catch((err) => report('error', 'Failed to load blocks', err))
   }, [conversationId])
 
+  useEffect(() => {
+    if (!conversationId) return
+
+    let cancelled = false
+
+    getConversation(conversationId)
+      .then((conversation) => {
+        if (!cancelled) {
+          setConversationTitle(conversation?.name ?? 'Untitled conversation')
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setConversationTitle('Untitled conversation')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [conversationId])
+
   const handleBlockCreated = useCallback((block: Block) => {
     setBlocks((prev) => [...prev, block])
   }, [])
 
   const handleSelectConversation = useCallback((id: string) => {
     setBlocks([])
+    setConversationTitle('—')
     setConversationId(id)
   }, [])
 
   const handleConversationDeleted = useCallback((nextConversationId: string | null) => {
+    setConversationTitle('—')
     setConversationId(nextConversationId)
     setBlocks([])
   }, [])
@@ -81,6 +104,9 @@ function AppShell({ session }: { session: Session }) {
           >
             <MenuIcon />
           </button>
+          <div className="ml-2 min-w-0 flex-1 truncate text-sm font-medium text-zinc-100">
+            {conversationTitle}
+          </div>
         </div>
         {conversationId ? (
           <>

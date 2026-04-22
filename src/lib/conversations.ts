@@ -19,6 +19,21 @@ export async function listConversations(userId: string): Promise<Conversation[]>
   return data
 }
 
+export async function getConversation(conversationId: string): Promise<Conversation | null> {
+  const { data, error } = await supabase
+    .from('conversations')
+    .select()
+    .eq('id', conversationId)
+    .maybeSingle()
+
+  if (error) {
+    report('error', 'Failed to fetch conversation', error)
+    throw error
+  }
+
+  return data
+}
+
 export async function createConversation(
   userId: string,
   folderId: string,
