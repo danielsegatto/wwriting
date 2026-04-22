@@ -263,3 +263,19 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - `.github/workflows/deploy.yml` validates `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` before `npm run build` and passes them into the build step from GitHub repository secrets.
 - `src/lib/supabase.ts` throws one explicit startup error when config is absent, avoiding the less helpful downstream `supabaseUrl is required` exception from the SDK.
 - Deployment docs must mention the GitHub-side secret setup, not only `.env.local`.
+
+## 026 — 2026-04-22 — PWA via vite-plugin-pwa; autoUpdate; Supabase traffic excluded from SW cache
+
+**Status:** accepted.
+**Decision:** Use `vite-plugin-pwa` in `generateSW` mode with `registerType: 'autoUpdate'`. The service worker precaches the built app shell (HTML, JS, CSS) for fast subsequent loads and installability. All traffic to `*.supabase.co` is routed `NetworkOnly` — never cached. Icons (`pwa-192x192.png`, `pwa-512x512.png`, `apple-touch-icon.png`) are pre-generated from `public/favicon.svg` using `scripts/gen-icons.mjs` and committed; they are not regenerated at build time.
+**Rejected:**
+- Offline support: explicitly out of scope per `docs/06-out-of-scope.md` and `docs/04-decisions.md` §011. The SW is for installability and startup speed, not offline writes.
+- Caching Supabase traffic: rejected because auth tokens and API responses are user-specific, session-bound, and must not be served stale. A cached auth response could mask a session expiry.
+- `registerType: 'prompt'`: rejected because there is only one user — a silent auto-update is always correct and eliminates the "waiting" service worker state.
+- Generating icons at build time (e.g., via `@vite-pwa/assets-generator`): rejected because it adds a build-time SVG rasterization dependency and extra CI configuration. Pre-generating once and committing the PNGs is simpler and stable.
+- Using SVG directly as the manifest icon: rejected because iOS Safari requires PNG for apple-touch-icon, and SVG manifest icons are not supported on all platforms.
+**Consequences:**
+- `vite-plugin-pwa@1.2.0` installed with `--legacy-peer-deps` because the package's peer dep declaration caps at Vite 7; the plugin works correctly with Vite 8 in practice.
+- `start_url` and `scope` in the manifest must match the production base path (`/wwriting/`); the vite config reads `command` at definition time and sets these conditionally.
+- `scripts/gen-icons.mjs` documents the icon regeneration procedure. If `favicon.svg` changes, re-run the script and commit the updated PNGs.
+- The build emits `dist/sw.js`, `dist/workbox-*.js`, and `dist/manifest.webmanifest`. The deploy workflow picks these up automatically since it publishes all of `dist/`.

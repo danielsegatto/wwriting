@@ -58,7 +58,7 @@ When building the real thing under `src/`:
 - [ ] Export full workspace as zip of `.md` files
 - [ ] Realtime sync (Supabase/Pocketbase subscription)
 - [ ] Optimistic local state on send
-- [ ] PWA manifest + service worker (installable on iOS)
+- [x] PWA manifest + service worker (installable on iOS via `vite-plugin-pwa`; icons at `public/pwa-{192,512}x{192,512}.png` + `public/apple-touch-icon.png`; SW caches app shell, never caches `*.supabase.co`)
 
 ## Planned — Phase 2 (connective tissue)
 
