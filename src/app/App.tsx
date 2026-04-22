@@ -269,7 +269,7 @@ function AppShell({ session }: { session: Session }) {
   }, [buildConversationMarkdown])
 
   return (
-    <div className="flex h-screen bg-zinc-950 text-zinc-100">
+    <div className="flex h-dvh min-h-0 w-full overflow-hidden bg-zinc-950 text-zinc-100">
       {sidebarOpen && (
         <Sidebar
           userId={session.user.id}
@@ -279,7 +279,7 @@ function AppShell({ session }: { session: Session }) {
           onClose={() => setSidebarOpen(false)}
         />
       )}
-      <div className="relative flex min-w-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {sidebarOpen && (
           <button
             type="button"
@@ -288,7 +288,7 @@ function AppShell({ session }: { session: Session }) {
             className="absolute inset-0 z-10 cursor-default"
           />
         )}
-        <div className="flex items-center px-3 py-2 border-b border-zinc-800">
+        <div className="flex shrink-0 items-center border-b border-zinc-800 px-3 py-2">
           <button
             onClick={() => setSidebarOpen((o) => !o)}
             title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}

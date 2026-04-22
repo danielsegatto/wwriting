@@ -363,7 +363,7 @@ export function Composer({ conversationId, userId, onBlockCreated }: Props) {
   const canCreateTag = Boolean(tagPicker && tagPicker.query !== '' && !hasExactTagSuggestion)
 
   return (
-    <div className="relative flex items-end gap-2 p-4">
+    <div className="relative flex shrink-0 items-end gap-2 p-4">
       {(citationPicker || tagPicker) && (
         <div
           ref={pickerRef}

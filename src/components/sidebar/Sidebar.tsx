@@ -141,7 +141,7 @@ export function Sidebar({
   }, [folders, conversations, selectedConversationId, onConversationDeleted])
 
   return (
-    <div className="flex h-screen w-56 flex-shrink-0 flex-col border-r border-zinc-800 bg-zinc-900">
+    <div className="flex h-full min-h-0 w-56 flex-shrink-0 flex-col border-r border-zinc-800 bg-zinc-900">
       <div className="flex items-center justify-between px-3 py-3">
         <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
           Conversations

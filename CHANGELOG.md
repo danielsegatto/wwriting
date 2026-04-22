@@ -12,6 +12,7 @@ Newest entries first. One line per change. Format:
 
 ## 2026-04-22
 
+- Fix mobile viewport layout: replace `h-screen` with `h-dvh`, add `min-h-0` to flex children, and lock overflow so the shell never scrolls outside the BlockFeed.
 - Fail GitHub Pages deploys when Supabase Vite env vars are missing, inject them from Actions secrets, and replace the downstream SDK crash with one explicit startup error.
 - Deploy GitHub Pages through a GitHub Actions workflow that builds Vite output from `main` and publishes `dist/`.
 - Add Conversation Markdown export in the header with shared copy/download formatting, citation-link translation, and unit tests.

@@ -1378,7 +1378,7 @@ export function BlockFeed({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-4">
+    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
       <div ref={listRef} className="mx-auto max-w-2xl space-y-3">
         {selectedBlocks.length > 0 && (
           <div className="sticky top-0 z-20 rounded-3xl border border-zinc-700 bg-zinc-900/95 p-3 shadow-2xl shadow-black/30 backdrop-blur">

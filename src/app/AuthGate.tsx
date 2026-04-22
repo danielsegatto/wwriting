@@ -24,13 +24,13 @@ export function AuthGate({ children }: Props) {
   // undefined = loading; null = no session; Session = authenticated
   if (session === undefined) {
     return (
-      <div className="flex h-screen items-center justify-center bg-zinc-950" />
+      <div className="flex min-h-dvh items-center justify-center bg-zinc-950" />
     )
   }
 
   if (session === null) {
     return (
-      <div className="flex h-screen items-center justify-center bg-zinc-950">
+      <div className="flex min-h-dvh items-center justify-center bg-zinc-950">
         <div className="w-full max-w-sm px-4">
           <p className="mb-6 text-center text-xs tracking-widest text-zinc-500 uppercase">
             wwriting
