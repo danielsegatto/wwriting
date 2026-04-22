@@ -170,9 +170,6 @@ function BlockItem({
   canCreateTag,
   onToggleSelected,
   onDragHandlePointerDown,
-  onDragHandlePointerMove,
-  onDragHandlePointerUp,
-  onDragHandlePointerCancel,
   onOpenActionMenu,
   onCloseAction,
   onOpenPicker,
@@ -219,9 +216,6 @@ function BlockItem({
   canCreateTag: boolean
   onToggleSelected: () => void
   onDragHandlePointerDown: (event: React.PointerEvent<HTMLButtonElement>) => void
-  onDragHandlePointerMove: (event: React.PointerEvent<HTMLButtonElement>) => void
-  onDragHandlePointerUp: (event: React.PointerEvent<HTMLButtonElement>) => void
-  onDragHandlePointerCancel: (event: React.PointerEvent<HTMLButtonElement>) => void
   onOpenActionMenu: () => void
   onCloseAction: () => void
   onOpenPicker: () => void
@@ -399,10 +393,6 @@ function BlockItem({
         <button
           type="button"
           onPointerDown={onDragHandlePointerDown}
-          onPointerMove={onDragHandlePointerMove}
-          onPointerUp={onDragHandlePointerUp}
-          onPointerCancel={onDragHandlePointerCancel}
-          onLostPointerCapture={onDragHandlePointerCancel}
           onClick={(event) => event.preventDefault()}
           disabled={dragDisabled}
           className="touch-none rounded-full border border-zinc-700 p-2 text-zinc-400 transition hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
@@ -1079,7 +1069,7 @@ export function BlockFeed({
 
     event.preventDefault()
     event.stopPropagation()
-    event.currentTarget.setPointerCapture(event.pointerId)
+    listRef.current?.setPointerCapture(event.pointerId)
     resetTransientUi()
 
     const previewBlocks =
@@ -1102,7 +1092,7 @@ export function BlockFeed({
     if (blockGhostRef.current) blockGhostRef.current.style.top = `${event.clientY - 20}px`
   }
 
-  function handleDragHandlePointerMove(event: React.PointerEvent<HTMLButtonElement>) {
+  function handleDragHandlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
     const session = dragSessionRef.current
     if (!session || session.pointerId !== event.pointerId) return
 
@@ -1126,15 +1116,13 @@ export function BlockFeed({
     })
   }
 
-  function finishDrag(event: React.PointerEvent<HTMLButtonElement>) {
+  function finishDrag(event: React.PointerEvent<HTMLDivElement>) {
     const session = dragSessionRef.current
     if (!session || session.pointerId !== event.pointerId) return
 
     dragSessionRef.current = null
 
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
+    listRef.current?.releasePointerCapture(event.pointerId)
     const nextPreviewBlocks = session.previewBlocks
     const currentBlocks =
       optimisticOrder?.conversationId === conversationId ? optimisticOrder.blocks : blocksRef.current
@@ -1400,7 +1388,14 @@ export function BlockFeed({
       {dragState?.ghostLabel}
     </div>
     <div className={`min-h-0 flex-1 overflow-y-auto px-4 py-4${dragState ? ' touch-none' : ''}`}>
-      <div ref={listRef} className="mx-auto max-w-2xl space-y-3">
+      <div
+        ref={listRef}
+        className="mx-auto max-w-2xl space-y-3"
+        onPointerMove={handleDragHandlePointerMove}
+        onPointerUp={finishDrag}
+        onPointerCancel={finishDrag}
+        onLostPointerCapture={finishDrag}
+      >
         {selectedBlocks.length > 0 && (
           <div className="sticky top-0 z-20 rounded-3xl border border-zinc-700 bg-zinc-900/95 p-3 shadow-2xl shadow-black/30 backdrop-blur">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1564,9 +1559,6 @@ export function BlockFeed({
             canCreateTag={canCreateTag}
             onToggleSelected={() => toggleSelectedBlock(block.id)}
             onDragHandlePointerDown={(event) => handleDragHandlePointerDown(block, event)}
-            onDragHandlePointerMove={handleDragHandlePointerMove}
-            onDragHandlePointerUp={finishDrag}
-            onDragHandlePointerCancel={finishDrag}
             onOpenActionMenu={() => openAction(block, 'menu')}
             onCloseAction={() => closeAction(block.id)}
             onOpenPicker={() => {
