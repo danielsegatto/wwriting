@@ -4,7 +4,7 @@ import { Auth } from '@supabase/auth-ui-react'
 import { ThemeSupa } from '@supabase/auth-ui-shared'
 import { supabase } from '../lib/supabase.ts'
 
-type Props = { children: ReactNode }
+type Props = { children: (session: Session) => ReactNode }
 
 export function AuthGate({ children }: Props) {
   const [session, setSession] = useState<Session | null | undefined>(undefined)
@@ -60,5 +60,5 @@ export function AuthGate({ children }: Props) {
     )
   }
 
-  return <>{children}</>
+  return <>{children(session)}</>
 }
