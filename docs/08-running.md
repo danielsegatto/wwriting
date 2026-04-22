@@ -95,13 +95,21 @@ Authentication is handled by Supabase Auth through
 
 ## Deploying
 
-Production hosting is not fully documented yet, but the current shape is:
+The app is deployed to GitHub Pages at:
 
-- Frontend: static Vite build output from `npm run build`
+- `https://danielsegatto.github.io/wwriting/`
+
+Current deployment shape:
+
+- Frontend: GitHub Actions runs `npm ci` and `npm run build`, then deploys
+  `dist/` to GitHub Pages via `.github/workflows/deploy.yml`
 - Backend: Supabase-hosted auth, Postgres, and realtime
 
-If deployment steps become part of the routine, document the exact host and
-commands here rather than leaving them implied.
+Important:
+
+- The Pages source should be `GitHub Actions`, not the legacy branch source.
+- Because the site is served from a repo subpath, `vite.config.ts` sets
+  `base: '/wwriting/'` for production builds.
 
 ## Verification
 

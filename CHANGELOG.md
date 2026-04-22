@@ -12,6 +12,7 @@ Newest entries first. One line per change. Format:
 
 ## 2026-04-22
 
+- Deploy GitHub Pages through a GitHub Actions workflow that builds Vite output from `main` and publishes `dist/`.
 - Add Conversation Markdown export in the header with shared copy/download formatting, citation-link translation, and unit tests.
 - Add Block drag-to-reorder, multi-select bulk move/delete, and composer `#` tag suggestions with create-from-composer support.
 - Fix citation picker trigger so `@` opens in the composer and inline block editing, including edit-mode citation insertion.
