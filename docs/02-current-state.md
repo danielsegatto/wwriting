@@ -16,6 +16,7 @@
 - DB schema (`src/db/migrations/001_initial_schema.sql`) — all tables, indexes, `updated_at` triggers, and RLS policies matching `docs/03-data-model.md`. Run once in the Supabase SQL editor.
 - DB types (`src/db/types.ts`) — hand-written `Database` type for Supabase client inference. Regenerate with `npx supabase gen types typescript` after running migrations.
 - `src/lib/errors.ts` centralizes visible runtime reporting with `report('error' | 'warn' | 'info', ...)`, FIFO retention, subscribers for future UI, console mirroring, and one-time global `error` / `unhandledrejection` handlers. Activated at startup via `installGlobalErrorHandlers(window)` in `src/main.tsx`.
+- Block management in `src/components/feed/BlockFeed.tsx` — each Block has a local actions menu with a visible action button plus `double-click` / touch `long-press` shortcuts. Text Blocks can be edited inline with explicit save/cancel; any edit re-runs inline `#hashtag` reconciliation through `src/lib/tags.ts`. Text and divider Blocks can be moved to another Conversation via a picker or deleted via inline confirmation. Drag-to-sidebar and orphan-citation UI are still deferred.
 
 ## Reference prototype
 
@@ -46,9 +47,9 @@ When building the real thing under `src/`:
 - [ ] Clickable citation pills (navigate + highlight target)
 - [ ] Drag-to-reorder Blocks within Conversation
 - [ ] Drag-to-reorder sidebar tree
-- [ ] Move Block to another Conversation (picker + drag-to-sidebar)
-- [ ] Edit Block (double-click / long-press)
-- [ ] Delete Block (with orphan citation handling)
+- [x] Move Block to another Conversation (picker in Block actions menu; drag-to-sidebar still deferred)
+- [x] Edit Block (visible action button plus double-click / long-press shortcut; text Blocks only)
+- [x] Delete Block (inline confirmation in Block actions menu; orphan-citation UI still deferred)
 - [ ] Export Conversation as Markdown (download + copy)
 - [ ] Export full workspace as zip of `.md` files
 - [ ] Realtime sync (Supabase/Pocketbase subscription)

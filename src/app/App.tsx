@@ -84,7 +84,19 @@ function AppShell({ session }: { session: Session }) {
         </div>
         {conversationId ? (
           <>
-            <BlockFeed blocks={blocks} userId={session.user.id} />
+            <BlockFeed
+              blocks={blocks}
+              userId={session.user.id}
+              conversationId={conversationId}
+              onBlockUpdated={(updatedBlock) => {
+                setBlocks((prev) =>
+                  prev.map((block) => (block.id === updatedBlock.id ? updatedBlock : block)),
+                )
+              }}
+              onBlockRemoved={(blockId) => {
+                setBlocks((prev) => prev.filter((block) => block.id !== blockId))
+              }}
+            />
             <Composer
               conversationId={conversationId}
               userId={session.user.id}

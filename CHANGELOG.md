@@ -12,6 +12,7 @@ Newest entries first. One line per change. Format:
 
 ## 2026-04-22
 
+- Add block action menus with inline text-block editing, block move picker, delete confirmation, and shared inline-tag reconciliation helpers in `src/lib/blocks.ts` / `src/lib/tags.ts`.
 - Add block-level tag picker with picker-only tag removal and mobile-safe picker positioning in BlockFeed; extend `src/lib/tags.ts` with tag listing and per-block tag aggregation helpers.
 - Add inline Create Folder / Create Conversation to sidebar: "+" in header creates a folder; "+" on hover per folder creates a conversation; inline input with Enter/Escape/blur handling; auto-navigate on creation. (cba8976)
 - Add Sidebar tree: collapsible folders, conversation leaves, click-to-select; `src/lib/folders.ts` + `listConversations` added to `src/lib/conversations.ts`; App.tsx refactored to two-column layout with split effects.

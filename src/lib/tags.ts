@@ -8,6 +8,7 @@ export type AppliedTag = Tag & { sources: BlockTagSource[] }
 
 const pickerTagSource = 'picker' as const
 const inlineTagSource = 'inline' as const
+const HASHTAG_RE = /(?:^|\s)#([a-zA-Z0-9_]+)/g
 
 function normalizeTagName(name: string): string {
   return name.trim().replace(/^#+/, '').toLowerCase()
@@ -61,6 +62,18 @@ export async function findOrCreateTag(name: string, userId: string): Promise<Tag
   }
 
   return data
+}
+
+export function extractInlineTagNames(body: string): string[] {
+  const names = [...body.matchAll(HASHTAG_RE)].map((match) => normalizeTagName(match[1]))
+  return unique(names.filter(Boolean))
+}
+
+export async function ensureTagsExist(tagNames: string[], userId: string): Promise<Tag[]> {
+  const normalizedTagNames = unique(tagNames.map(normalizeTagName).filter(Boolean))
+  if (normalizedTagNames.length === 0) return []
+
+  return Promise.all(normalizedTagNames.map((name) => findOrCreateTag(name, userId)))
 }
 
 export async function listTagsForBlock(blockId: string): Promise<AppliedTag[]> {
@@ -174,4 +187,57 @@ export async function removePickerTagFromBlock(blockId: string, tagId: string): 
     report('error', 'Failed to remove picker tag from block', error)
     throw error
   }
+}
+
+async function listInlineTagIdsForBlock(blockId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('block_tags')
+    .select('tag_id')
+    .eq('block_id', blockId)
+    .eq('source', inlineTagSource)
+
+  if (error) {
+    report('error', 'Failed to list inline block tags', error)
+    throw error
+  }
+
+  return data.map((row) => row.tag_id)
+}
+
+async function removeInlineTagsFromBlock(blockId: string, tagIds: string[]): Promise<void> {
+  const uniqueTagIds = unique(tagIds)
+  if (uniqueTagIds.length === 0) return
+
+  const { error } = await supabase
+    .from('block_tags')
+    .delete()
+    .eq('block_id', blockId)
+    .eq('source', inlineTagSource)
+    .in('tag_id', uniqueTagIds)
+
+  if (error) {
+    report('error', 'Failed to remove inline block tags', error)
+    throw error
+  }
+}
+
+export async function reconcileInlineTagsForBlock(
+  blockId: string,
+  body: string,
+  userId: string,
+): Promise<Tag[]> {
+  const nextTags = await ensureTagsExist(extractInlineTagNames(body), userId)
+  const nextTagIds = nextTags.map((tag) => tag.id)
+  const currentTagIds = await listInlineTagIdsForBlock(blockId)
+
+  const currentSet = new Set(currentTagIds)
+  const nextSet = new Set(nextTagIds)
+
+  const tagIdsToAdd = nextTagIds.filter((tagId) => !currentSet.has(tagId))
+  const tagIdsToRemove = currentTagIds.filter((tagId) => !nextSet.has(tagId))
+
+  await attachTagsToBlock(blockId, tagIdsToAdd, inlineTagSource)
+  await removeInlineTagsFromBlock(blockId, tagIdsToRemove)
+
+  return nextTags
 }

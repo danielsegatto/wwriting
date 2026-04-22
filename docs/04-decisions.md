@@ -222,3 +222,19 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - The feed owns enough block metadata UI to display applied Tag pills and open a small picker for text Blocks.
 - Picker-applied tags write `block_tags` rows with `source='picker'`; removing a picker Tag only deletes that provenance row and must not affect inline tags derived from `body`.
 - A visible Tag pill is the union of picker and inline sources. If both exist for the same Tag, removing the picker source leaves the pill visible.
+
+## 023 — 2026-04-22 — Block management lives in feed-local action menus; move ships as picker first
+
+**Status:** accepted.
+**Decision:** Block editing, moving, and deletion are exposed from a feed-local actions menu on each Block. The menu is always discoverable through a visible action button, with `double-click` on desktop and `long-press` on touch as shortcuts to the same controls. Move ships first as a destination Conversation picker inside the Block card; drag-to-sidebar is deferred. Inline editing applies only to text Blocks in this slice; divider Blocks support move/delete but not inline edit.
+**Rejected:**
+- Gesture-only discovery: rejected because it hides load-bearing block actions behind behavior the user might never discover, especially on mobile.
+- Modal edit / move flows: rejected because they add visual weight and distance the action from the Block being changed.
+- Bundling drag-to-sidebar into the same slice: rejected because the sidebar/feed do not yet have drag infrastructure, and the picker path covers the core move behavior without delaying the rest of block management.
+- Editing divider Blocks now: rejected because divider editing semantics are less important than shipping the text-block editing loop and would complicate this slice for little value.
+**Consequences:**
+- `src/components/feed/BlockFeed.tsx` now owns action-menu state, edit state, and move/delete confirmation state for the active Block rather than lifting these controls into `AppShell`.
+- `src/lib/blocks.ts` expands from create/list helpers into CRUD-style helpers for update, delete, and move.
+- Inline hashtag reconciliation can no longer live only in the Composer; `src/lib/tags.ts` owns reusable extract/ensure/reconcile helpers so edits and creates follow the same rules.
+- The source conversation updates immediately after move/delete by removing the Block from local feed state; destination conversations pick the Block up on reload/navigation.
+- Drag-to-sidebar remains a separate follow-up feature. Do not treat this decision as having completed the drag half of the original backlog item.

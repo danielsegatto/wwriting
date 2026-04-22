@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
-import { createBlock } from '../../lib/blocks.ts'
-import { findOrCreateTag, attachTagsToBlock } from '../../lib/tags.ts'
+import { createAppendPosition, createBlock } from '../../lib/blocks.ts'
+import { attachTagsToBlock, ensureTagsExist, extractInlineTagNames } from '../../lib/tags.ts'
 import { report } from '../../lib/errors.ts'
 
 type Props = {
@@ -9,7 +9,6 @@ type Props = {
   onBlockCreated?: (block: import('../../lib/blocks.ts').Block) => void
 }
 
-const HASHTAG_RE = /(?:^|\s)#([a-zA-Z0-9_]+)/g
 const DIVIDER_RE = /^---+$/
 
 export function Composer({ conversationId, userId, onBlockCreated }: Props) {
@@ -31,14 +30,14 @@ export function Composer({ conversationId, userId, onBlockCreated }: Props) {
     setSending(true)
     try {
       const type = DIVIDER_RE.test(trimmed) ? 'divider' : 'text'
-      const position = Date.now().toString()
+      const position = createAppendPosition()
 
       const block = await createBlock({ conversationId, userId, body: trimmed, position, type })
       onBlockCreated?.(block)
 
-      const tagNames = [...trimmed.matchAll(HASHTAG_RE)].map((m) => m[1])
+      const tagNames = extractInlineTagNames(trimmed)
       if (tagNames.length > 0) {
-        const tags = await Promise.all(tagNames.map((name) => findOrCreateTag(name, userId)))
+        const tags = await ensureTagsExist(tagNames, userId)
         await attachTagsToBlock(block.id, tags.map((t) => t.id))
       }
 
