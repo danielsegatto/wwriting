@@ -145,14 +145,14 @@ function FolderRow({
     <div>
       <button
         onClick={() => onToggle(folder.id)}
-        className="group flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+        className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
       >
         <ChevronIcon collapsed={collapsed} />
         <span className="flex-1 truncate">{folder.name}</span>
         <span
           role="button"
           onClick={(e) => { e.stopPropagation(); onCreateConversation() }}
-          className="ml-auto hidden rounded p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300 group-hover:block"
+          className="ml-auto rounded p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
           title="New conversation"
         >
           <PlusIcon />
