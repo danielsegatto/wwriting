@@ -3,6 +3,8 @@ import { listFolders, createFolder, deleteFolder } from '../../lib/folders.ts'
 import { listConversations, createConversation, deleteConversation } from '../../lib/conversations.ts'
 import type { Folder } from '../../lib/folders.ts'
 import type { Conversation } from '../../lib/conversations.ts'
+import { supabase } from '../../lib/supabase.ts'
+import { report } from '../../lib/errors.ts'
 
 type CreatingState =
   | { type: 'folder' }
@@ -36,6 +38,67 @@ export function Sidebar({
         setConversations(c)
       }
     )
+  }, [userId])
+
+  // Realtime sync for folders and conversations
+  useEffect(() => {
+    const channel = supabase
+      .channel(`sidebar:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'folders',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const folder = payload.new as Folder
+            setFolders((prev) =>
+              prev.some((f) => f.id === folder.id) ? prev : [...prev, folder],
+            )
+          } else if (payload.eventType === 'UPDATE') {
+            const folder = payload.new as Folder
+            setFolders((prev) => prev.map((f) => (f.id === folder.id ? folder : f)))
+          } else if (payload.eventType === 'DELETE') {
+            const folderId = (payload.old as { id: string }).id
+            setFolders((prev) => prev.filter((f) => f.id !== folderId))
+          }
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversations',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const conv = payload.new as Conversation
+            setConversations((prev) =>
+              prev.some((c) => c.id === conv.id) ? prev : [...prev, conv],
+            )
+          } else if (payload.eventType === 'UPDATE') {
+            const conv = payload.new as Conversation
+            setConversations((prev) => prev.map((c) => (c.id === conv.id ? conv : c)))
+          } else if (payload.eventType === 'DELETE') {
+            const convId = (payload.old as { id: string }).id
+            setConversations((prev) => prev.filter((c) => c.id !== convId))
+          }
+        },
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          report('warn', 'Sidebar realtime subscription error — changes from other devices will not appear live')
+        }
+      })
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [userId])
 
   const toggleCollapse = useCallback((folderId: string) => {

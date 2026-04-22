@@ -56,7 +56,7 @@ When building the real thing under `src/`:
 - [x] Multi-select Blocks for bulk move/delete
 - [x] Export Conversation as Markdown (download + copy)
 - [ ] Export full workspace as zip of `.md` files
-- [ ] Realtime sync (Supabase/Pocketbase subscription)
+- [x] Realtime sync: `postgres_changes` subscriptions in `AppShell` (blocks for the active conversation) and `Sidebar` (folders + conversations). INSERT/UPDATE/DELETE handled with deduplication; Supabase free tier covers single-user traffic easily.
 - [ ] Optimistic local state on send
 - [x] PWA manifest + service worker (installable on iOS via `vite-plugin-pwa`; icons at `public/pwa-{192,512}x{192,512}.png` + `public/apple-touch-icon.png`; SW caches app shell, never caches `*.supabase.co`)
 

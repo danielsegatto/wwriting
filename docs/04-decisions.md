@@ -264,6 +264,20 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - `src/lib/supabase.ts` throws one explicit startup error when config is absent, avoiding the less helpful downstream `supabaseUrl is required` exception from the SDK.
 - Deployment docs must mention the GitHub-side secret setup, not only `.env.local`.
 
+## 027 — 2026-04-22 — Realtime via postgres_changes in component effects; no shared subscription manager
+
+**Status:** accepted.
+**Decision:** Realtime subscriptions are set up directly inside `useEffect` hooks in the two components that own the relevant state: `AppShell` (one channel for `blocks` filtered by `conversation_id`) and `Sidebar` (one channel for both `folders` and `conversations` filtered by `user_id`). Each effect returns a cleanup that calls `supabase.removeChannel`. INSERT events are deduplicated by ID before being applied to state; UPDATE events replace the matching row; DELETE events filter it out.
+**Rejected:**
+- A shared subscription manager or context: rejected as over-engineering for a single-user app with two subscription sites and no shared state between them.
+- Refetching the full list on every realtime event: rejected because it adds a round-trip per event and would cause visible jank for remote inserts.
+- Subscribing to all tables globally and filtering in-memory: rejected because Supabase charges message volume against the free tier; server-side `filter:` cuts noise at the source.
+**Consequences:**
+- Changing `conversationId` tears down the old block channel and opens a new one (effect dependency array). The brief window during conversation switch where realtime is not active is acceptable.
+- INSERT deduplication is critical: this device writes a block locally via `handleBlockCreated`, then the same block arrives via realtime. The `prev.some((b) => b.id === block.id)` guard prevents a duplicate.
+- Remote INSERT blocks are sorted into position order rather than appended to the end, so they appear at the correct visual position regardless of the receiving device's clock offset.
+- `CHANNEL_ERROR` status routes through the error reporter as a warning, which is visible in the in-app event log per §014.
+
 ## 026 — 2026-04-22 — PWA via vite-plugin-pwa; autoUpdate; Supabase traffic excluded from SW cache
 
 **Status:** accepted.

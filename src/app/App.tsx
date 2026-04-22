@@ -15,6 +15,7 @@ import {
 import { report } from '../lib/errors.ts'
 import { loadCitationTargetsForBlocks } from '../lib/references.ts'
 import type { CitationTarget } from '../lib/references.ts'
+import { supabase } from '../lib/supabase.ts'
 
 function MenuIcon() {
   return (
@@ -129,6 +130,54 @@ function AppShell({ session }: { session: Session }) {
 
     return () => {
       cancelled = true
+    }
+  }, [conversationId])
+
+  // Realtime sync for blocks in the current conversation
+  useEffect(() => {
+    if (!conversationId) return
+
+    const channel = supabase
+      .channel(`blocks:${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'blocks',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const block = payload.new as Block
+            setBlocks((prev) => {
+              if (prev.some((b) => b.id === block.id)) return prev
+              const next = [...prev, block]
+              next.sort((a, b) => (a.position > b.position ? 1 : a.position < b.position ? -1 : 0))
+              return next
+            })
+          } else if (payload.eventType === 'UPDATE') {
+            const block = payload.new as Block
+            if (block.conversation_id !== conversationId) {
+              // Block was moved to another conversation — remove it
+              setBlocks((prev) => prev.filter((b) => b.id !== block.id))
+            } else {
+              setBlocks((prev) => prev.map((b) => (b.id === block.id ? block : b)))
+            }
+          } else if (payload.eventType === 'DELETE') {
+            const blockId = (payload.old as { id: string }).id
+            setBlocks((prev) => prev.filter((b) => b.id !== blockId))
+          }
+        },
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          report('warn', 'Block realtime subscription error — changes from other devices will not appear live')
+        }
+      })
+
+    return () => {
+      supabase.removeChannel(channel)
     }
   }, [conversationId])
 
