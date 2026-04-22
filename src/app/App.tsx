@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js'
 import { AuthGate } from './AuthGate.tsx'
 import { Composer } from '../components/composer/Composer.tsx'
 import { BlockFeed } from '../components/feed/BlockFeed.tsx'
+import { Sidebar } from '../components/sidebar/Sidebar.tsx'
 import { ensureDefaultConversation } from '../lib/conversations.ts'
 import { listBlocks } from '../lib/blocks.ts'
 import type { Block } from '../lib/blocks.ts'
@@ -20,32 +21,51 @@ function AppShell({ session }: { session: Session }) {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [blocks, setBlocks] = useState<Block[]>([])
 
+  // Bootstrap default conversation on first load
   useEffect(() => {
     ensureDefaultConversation(session.user.id)
-      .then((id) => {
-        setConversationId(id)
-        return listBlocks(id)
-      })
-      .then(setBlocks)
-      .catch((err) => report('error', 'Failed to load conversation', err))
+      .then(setConversationId)
+      .catch((err) => report('error', 'Failed to bootstrap conversation', err))
   }, [session.user.id])
+
+  // Reload blocks whenever the selected conversation changes
+  useEffect(() => {
+    if (!conversationId) return
+    setBlocks([])
+    listBlocks(conversationId)
+      .then(setBlocks)
+      .catch((err) => report('error', 'Failed to load blocks', err))
+  }, [conversationId])
 
   const handleBlockCreated = useCallback((block: Block) => {
     setBlocks((prev) => [...prev, block])
   }, [])
 
-  if (!conversationId) {
-    return <div className="flex h-screen items-center justify-center bg-zinc-950" />
-  }
+  const handleSelectConversation = useCallback((id: string) => {
+    setConversationId(id)
+  }, [])
 
   return (
-    <div className="flex h-screen flex-col bg-zinc-950 text-zinc-100">
-      <BlockFeed blocks={blocks} />
-      <Composer
-        conversationId={conversationId}
+    <div className="flex h-screen bg-zinc-950 text-zinc-100">
+      <Sidebar
         userId={session.user.id}
-        onBlockCreated={handleBlockCreated}
+        selectedConversationId={conversationId}
+        onSelectConversation={handleSelectConversation}
       />
+      <div className="flex flex-1 flex-col min-w-0">
+        {conversationId ? (
+          <>
+            <BlockFeed blocks={blocks} />
+            <Composer
+              conversationId={conversationId}
+              userId={session.user.id}
+              onBlockCreated={handleBlockCreated}
+            />
+          </>
+        ) : (
+          <div className="flex flex-1 items-center justify-center" />
+        )}
+      </div>
     </div>
   )
 }

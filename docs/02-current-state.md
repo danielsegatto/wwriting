@@ -34,7 +34,7 @@ When building the real thing under `src/`:
 - [x] Auth: `@supabase/auth-ui-react` `<Auth>` component gated behind `src/app/AuthGate.tsx`; email/password + forgot-password flow; `signOut()` helper in `src/lib/auth.ts` (see §018)
 - [x] Data model (migrations for folders, conversations, blocks, tags, block_tags, block_references, user_settings) — see §017
 - [x] Composer (`src/components/composer/Composer.tsx`): send on Enter, Shift+Enter newline, divider detection, inline #hashtag parsing → `block_tags` rows (see §019)
-- [ ] Sidebar tree (folders nestable, conversations as leaves)
+- [x] Sidebar tree (folders nestable, conversations as leaves): `src/components/sidebar/Sidebar.tsx` — collapsible folders, conversation leaves, click-to-select. Data-fetching owned by the Sidebar itself (see §020).
 - [x] Block rendering (`src/components/feed/BlockFeed.tsx`): renders `text` blocks as Markdown (via `marked`), `divider` blocks as `<hr>`. Optimistic append on send; loads full history on mount via `listBlocks()`.
 - [x] Topic divider Blocks (send `---` → `type='divider'` — done in Composer, see §019)
 - [x] Inline `#hashtag` parsing → `block_tags` rows (done in Composer, see §019)

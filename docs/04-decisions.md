@@ -182,3 +182,15 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - Styling is driven by the `ThemeSupa` theme with `variables` overrides to match the zinc dark palette — not Tailwind utilities, since the component renders its own CSS custom properties.
 - If the auth UI needs to diverge from what `@supabase/auth-ui-react` supports, the package must be replaced with custom forms. Do not patch the package internals.
 - The loading state (session check in-flight) renders a blank dark screen to avoid flashing the auth form before redirecting an already-authenticated user.
+
+## 020 — 2026-04-22 — Sidebar owns its own data fetch; two-effect pattern in AppShell
+
+**Status:** accepted.
+**Decision:** The `Sidebar` component fetches its own `folders` and `conversations` lists on mount via `Promise.all([listFolders, listConversations])`. `AppShell` does not pass these lists down. `AppShell` has two separate `useEffect`s: one that bootstraps the default conversation (depends on `userId`), and one that reloads blocks (depends on `conversationId`).
+**Rejected:**
+- Single monolithic `useEffect` in `AppShell` that fetches folders + conversations + blocks together: couples bootstrap logic to render-time data loading and makes it hard to reload blocks independently on conversation switch.
+- Passing folders and conversations from `AppShell` into `Sidebar` as props: adds unnecessary data-flow complexity; the Sidebar is the only consumer and it needs fresh data on mount regardless.
+**Consequences:**
+- When the user selects a conversation in the Sidebar, `AppShell` sets `conversationId`, triggering the second effect which clears blocks and reloads for the new conversation.
+- The `ensureDefaultConversation` bootstrap effect only sets `conversationId` on first load; the Sidebar independently fetches the folder/conversation list, so it will reflect the bootstrapped conversation automatically.
+- If Sidebar ever needs to reflect real-time changes, it should subscribe inside the component, not re-fetch on every parent render.

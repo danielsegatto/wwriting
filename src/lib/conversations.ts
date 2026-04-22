@@ -1,5 +1,23 @@
 import { supabase } from './supabase.ts'
 import { report } from './errors.ts'
+import type { Database } from '../db/types.ts'
+
+export type Conversation = Database['public']['Tables']['conversations']['Row']
+
+export async function listConversations(userId: string): Promise<Conversation[]> {
+  const { data, error } = await supabase
+    .from('conversations')
+    .select()
+    .eq('user_id', userId)
+    .order('position', { ascending: true })
+
+  if (error) {
+    report('error', 'Failed to list conversations', error)
+    throw error
+  }
+
+  return data
+}
 
 export async function ensureDefaultConversation(userId: string): Promise<string> {
   const { data: existing, error: fetchError } = await supabase

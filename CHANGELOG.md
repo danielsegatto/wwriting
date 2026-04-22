@@ -12,7 +12,8 @@ Newest entries first. One line per change. Format:
 
 ## 2026-04-22
 
-- Add BlockFeed component with Markdown rendering (`marked`), divider support, optimistic append, and history load on mount.
+- Add Sidebar tree: collapsible folders, conversation leaves, click-to-select; `src/lib/folders.ts` + `listConversations` added to `src/lib/conversations.ts`; App.tsx refactored to two-column layout with split effects.
+- Add BlockFeed component with Markdown rendering (`marked`), divider support, optimistic append, and history load on mount. (0caa535)
 - Add Composer component with Enter-to-send, Shift+Enter newline, divider detection, inline #hashtag parsing. (6a23717)
 - Add `src/lib/blocks.ts`, `tags.ts`, `conversations.ts` (minimal write-path lib layer); fix `src/db/types.ts` for `@supabase/postgrest-js` 2.104. (21a101b)
 
