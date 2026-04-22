@@ -369,7 +369,7 @@ export function Sidebar({
       </div>
       <div
         ref={listRef}
-        className="flex-1 overflow-y-auto px-1 pb-4"
+        className={`flex-1 overflow-y-auto px-1 pb-4${dragState ? ' touch-none' : ''}`}
         onPointerMove={handleDragPointerMove}
         onPointerUp={finishDrag}
         onPointerCancel={finishDrag}
