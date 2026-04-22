@@ -45,6 +45,10 @@ VITE_SUPABASE_ANON_KEY=...
 If either variable is missing, `src/lib/supabase.ts` reports a visible runtime
 error instead of failing silently.
 
+For GitHub Pages deployments, these same variables must be present in the
+GitHub Actions build environment. Vite replaces `import.meta.env.*` at build
+time, so a static deploy cannot "pick them up later" in the browser.
+
 ## Database setup
 
 The schema lives in
@@ -105,11 +109,18 @@ Current deployment shape:
   `dist/` to GitHub Pages via `.github/workflows/deploy.yml`
 - Backend: Supabase-hosted auth, Postgres, and realtime
 
+Required GitHub repository secrets for deploys:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+
 Important:
 
 - The Pages source should be `GitHub Actions`, not the legacy branch source.
 - Because the site is served from a repo subpath, `vite.config.ts` sets
   `base: '/wwriting/'` for production builds.
+- The deploy workflow now fails before publishing if the required Supabase
+  build variables are missing, instead of shipping a broken bundle.
 
 ## Verification
 
@@ -127,6 +138,9 @@ loads past the auth screen.
 
 - Blank or broken auth flow on startup: confirm `.env.local` exists and that
   `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set correctly.
+- GitHub Pages loads but the app crashes before auth renders: confirm the repo
+  has GitHub Actions secrets named `VITE_SUPABASE_URL` and
+  `VITE_SUPABASE_ANON_KEY`, then rerun the Pages workflow.
 - Database errors after login: re-run
   `src/db/migrations/001_initial_schema.sql` in the Supabase SQL editor and
   confirm the authenticated user has the expected tables and RLS policies.

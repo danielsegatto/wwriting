@@ -251,3 +251,15 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - `src/lib/conversationMarkdown.ts` owns the pure export formatter and filename helper so the export rules are unit-testable outside the browser.
 - `src/app/App.tsx` loads citation targets only when the user exports, keeping the compose/render path unchanged.
 - Copy and download share the same formatter, so clipboard export and file export stay byte-for-byte aligned.
+
+## 025 — 2026-04-22 — Supabase browser config is build-time deploy config, not runtime config
+
+**Status:** accepted.
+**Decision:** `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are treated as required Vite build-time inputs for both local and deployed builds. GitHub Pages deploys must inject them through the GitHub Actions workflow, and the workflow should fail before publishing if they are absent.
+**Rejected:**
+- Expecting a static GitHub Pages site to read `.env.local` or any other environment file at runtime: rejected because Vite inlines `import.meta.env.*` during the build, and the browser only receives the compiled bundle.
+- Allowing deploys to succeed with missing values and relying on the runtime error reporter to explain the failure: rejected because it publishes a known-broken bundle and pushes a deployment-configuration mistake into the user's browser.
+**Consequences:**
+- `.github/workflows/deploy.yml` validates `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` before `npm run build` and passes them into the build step from GitHub repository secrets.
+- `src/lib/supabase.ts` throws one explicit startup error when config is absent, avoiding the less helpful downstream `supabaseUrl is required` exception from the SDK.
+- Deployment docs must mention the GitHub-side secret setup, not only `.env.local`.
