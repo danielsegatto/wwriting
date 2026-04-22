@@ -38,6 +38,7 @@ When building the real thing under `src/`:
 - [x] Block rendering (`src/components/feed/BlockFeed.tsx`): renders `text` blocks as Markdown (via `marked`), `divider` blocks as `<hr>`. Optimistic append on send; loads full history on mount via `listBlocks()`.
 - [x] Topic divider Blocks (send `---` → `type='divider'` — done in Composer, see §019)
 - [x] Inline `#hashtag` parsing → `block_tags` rows (done in Composer, see §019)
+- [x] Create Folder / Conversation from sidebar: inline input in sidebar tree; Enter confirms, Escape/blur cancels; auto-navigate on conversation creation (see §021).
 - [ ] Tag picker UI (explicit tag assignment)
 - [ ] Citation picker (`@` in composer → Block picker → insert `{{block:<uuid>}}`)
 - [ ] Clickable citation pills (navigate + highlight target)

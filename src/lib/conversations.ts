@@ -19,6 +19,25 @@ export async function listConversations(userId: string): Promise<Conversation[]>
   return data
 }
 
+export async function createConversation(
+  userId: string,
+  folderId: string,
+  name: string,
+): Promise<Conversation> {
+  const { data, error } = await supabase
+    .from('conversations')
+    .insert({ user_id: userId, folder_id: folderId, name, position: Date.now().toString() })
+    .select()
+    .single()
+
+  if (error) {
+    report('error', 'Failed to create conversation', error)
+    throw error
+  }
+
+  return data
+}
+
 export async function ensureDefaultConversation(userId: string): Promise<string> {
   const { data: existing, error: fetchError } = await supabase
     .from('conversations')

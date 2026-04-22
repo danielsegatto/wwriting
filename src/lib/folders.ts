@@ -18,3 +18,22 @@ export async function listFolders(userId: string): Promise<Folder[]> {
 
   return data
 }
+
+export async function createFolder(
+  userId: string,
+  name: string,
+  parentId?: string | null,
+): Promise<Folder> {
+  const { data, error } = await supabase
+    .from('folders')
+    .insert({ user_id: userId, name, position: Date.now().toString(), parent_id: parentId ?? null })
+    .select()
+    .single()
+
+  if (error) {
+    report('error', 'Failed to create folder', error)
+    throw error
+  }
+
+  return data
+}

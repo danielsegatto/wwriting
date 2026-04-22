@@ -194,3 +194,18 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - When the user selects a conversation in the Sidebar, `AppShell` sets `conversationId`, triggering the second effect which clears blocks and reloads for the new conversation.
 - The `ensureDefaultConversation` bootstrap effect only sets `conversationId` on first load; the Sidebar independently fetches the folder/conversation list, so it will reflect the bootstrapped conversation automatically.
 - If Sidebar ever needs to reflect real-time changes, it should subscribe inside the component, not re-fetch on every parent render.
+
+## 021 — 2026-04-22 — Inline creation UI in sidebar; no modal
+
+**Status:** accepted.
+**Decision:** Creating a folder or conversation is done via an inline `<input>` that appears in the sidebar tree at the point of creation (below existing folders for new folders; below conversations in the target folder for new conversations). Enter confirms; Escape or blur cancels. Empty input is a no-op.
+**Rejected:**
+- Modal dialog: breaks the writing flow; requires portal management and focus trapping; adds visual weight for a frequent operation.
+- Navigation to a dedicated "new folder" page: overkill for a single-user tool.
+- Separate name-input field always visible at the bottom: wastes sidebar space; the operation is infrequent enough that it should be triggered, not permanent.
+**Consequences:**
+- The `InlineInput` component autofocuses on mount via `useEffect` + `ref`.
+- `onBlur` cancels creation. This means that if the user clicks a folder's "new conversation" button while another inline input is active, the first blur fires first, cancelling the previous creation — which is the correct behavior.
+- After creating a conversation, the Sidebar calls `onSelectConversation` with the new ID, so `AppShell` auto-navigates to it.
+- Creating a folder with a collapsed target folder auto-expands it so the new conversation input is visible.
+- No optimistic UI beyond local state — the row only appears after the DB insert succeeds.
