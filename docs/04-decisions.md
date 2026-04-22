@@ -155,6 +155,21 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - The migration file (`src/db/migrations/001_initial_schema.sql`) is idempotent and safe to re-run. It does not use the Supabase CLI migration system, so there is no migration tracking table. If the CLI is adopted later, this file becomes migration 0001.
 - Realtime is enabled for `folders`, `conversations`, and `blocks` via `supabase_realtime` publication. `tags`, `block_tags`, `block_references`, and `user_settings` are not in the publication; they do not require realtime in the MVP.
 
+## 019 — 2026-04-22 — Composer-first build order; position as timestamp string
+
+**Status:** accepted.
+**Decision:** Build the Composer (write path) before the block list, sidebar, or full data-access layer. Use `Date.now().toString()` as the `position` value for new Blocks.
+**Rejected:**
+- Data-access-layer-first: would delay the writing loop. The Composer only needs `createBlock`, `findOrCreateTag`, and `attachTagsToBlock`.
+- Fractional indexing from day one: premature until drag-to-reorder is built. `Date.now().toString()` sorts lexicographically and is correct for append-only creation.
+- App-shell-first: no writing happens until the Composer is wired.
+**Consequences:**
+- `src/lib/blocks.ts`, `src/lib/tags.ts`, `src/lib/conversations.ts` exist as thin Supabase wrappers. Full CRUD (list, update, delete) is not yet present.
+- `ensureDefaultConversation` in `src/lib/conversations.ts` bootstraps a "Journal / My Notes" folder+conversation on first login. This is a one-time bootstrap helper, not a user-facing concept.
+- `AuthGate` now takes a render-prop `children: (session: Session) => ReactNode` so `App.tsx` can access the session without a second auth listener.
+- `src/db/types.ts` was updated to add `Relationships: []` to each table and `Views`/`Functions` to the public schema — required by `@supabase/postgrest-js` 2.104 which changed `GenericTable` and `GenericSchema` to require these fields.
+- `position` values will need to be migrated to proper fractional indices if drag-to-reorder is implemented. This is expected. The existing rows will sort by creation time which is correct.
+
 ## 018 — 2026-04-20 — Supabase hosted Auth UI over custom forms
 
 **Status:** accepted.

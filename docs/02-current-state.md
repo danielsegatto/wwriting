@@ -32,12 +32,12 @@ When building the real thing under `src/`:
 - [x] Project scaffold (React 19, Vite 8, Tailwind v4 — see §016)
 - [x] Supabase setup: client in `src/lib/supabase.ts`, typed via `src/db/types.ts`, migration at `src/db/migrations/001_initial_schema.sql` (see §017)
 - [x] Auth: `@supabase/auth-ui-react` `<Auth>` component gated behind `src/app/AuthGate.tsx`; email/password + forgot-password flow; `signOut()` helper in `src/lib/auth.ts` (see §018)
-- [ ] Data model (migrations for folders, conversations, blocks, tags, block_tags, block_references, user_settings)
-- [ ] Composer (send on Enter, Shift+Enter newline, type=text Blocks)
+- [x] Data model (migrations for folders, conversations, blocks, tags, block_tags, block_references, user_settings) — see §017
+- [x] Composer (`src/components/composer/Composer.tsx`): send on Enter, Shift+Enter newline, divider detection, inline #hashtag parsing → `block_tags` rows (see §019)
 - [ ] Sidebar tree (folders nestable, conversations as leaves)
 - [ ] Block rendering (Markdown + custom tokens)
-- [ ] Topic divider Blocks (send `---`, labeled)
-- [ ] Inline `#hashtag` parsing → `block_tags` rows
+- [x] Topic divider Blocks (send `---` → `type='divider'` — done in Composer, see §019)
+- [x] Inline `#hashtag` parsing → `block_tags` rows (done in Composer, see §019)
 - [ ] Tag picker UI (explicit tag assignment)
 - [ ] Citation picker (`@` in composer → Block picker → insert `{{block:<uuid>}}`)
 - [ ] Clickable citation pills (navigate + highlight target)

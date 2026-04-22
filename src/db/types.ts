@@ -36,6 +36,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       conversations: {
         Row: {
@@ -65,6 +66,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       blocks: {
         Row: {
@@ -97,6 +99,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       tags: {
         Row: {
@@ -120,6 +123,7 @@ export type Database = {
           color?: string | null
           created_at?: string
         }
+        Relationships: []
       }
       block_tags: {
         Row: {
@@ -140,6 +144,7 @@ export type Database = {
           source?: BlockTagSource
           created_at?: string
         }
+        Relationships: []
       }
       block_references: {
         Row: {
@@ -160,6 +165,7 @@ export type Database = {
           target_block_id?: string
           created_at?: string
         }
+        Relationships: []
       }
       user_settings: {
         Row: {
@@ -177,8 +183,11 @@ export type Database = {
           preferences?: Record<string, unknown>
           updated_at?: string
         }
+        Relationships: []
       }
     }
+    Views: Record<string, never>
+    Functions: Record<string, never>
     Enums: {
       block_type: BlockType
       block_tag_source: BlockTagSource
