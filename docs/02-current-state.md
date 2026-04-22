@@ -49,7 +49,7 @@ When building the real thing under `src/`:
 - [x] Citation picker (`@` in composer → Block picker → insert `{{block:<uuid>}}`)
 - [x] Clickable citation pills (navigate + highlight target)
 - [x] Drag-to-reorder Blocks within Conversation
-- [ ] Drag-to-reorder sidebar tree
+- [x] Drag-to-reorder sidebar tree: pointer-event drag handles on folder rows and conversation rows; folders reorder among themselves, conversations reorder within their folder; positions persisted via bulk upsert.
 - [x] Move Block to another Conversation (picker in Block actions menu; drag-to-sidebar still deferred)
 - [x] Edit Block (visible action button plus double-click / long-press shortcut; text Blocks only)
 - [x] Delete Block (inline confirmation in Block actions menu; orphan-citation UI still deferred)

@@ -125,7 +125,20 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - `CLAUDE.md` and `docs/09-session-handoff.md` instruct AI sessions to read recent commit bodies (not just `--oneline`) as part of orientation. Commit bodies are first-class context, alongside the docs and CHANGELOG.
 - The CHANGELOG remains the one-line high-level view; commit bodies are the detailed view. They complement, not duplicate.
 - When a commit body would contradict a doc, the doc is updated in the same commit and the body notes the divergence. Commits and docs must not drift apart.
-- Because commit history is append-only (no rewriting published history), the investment compounds. Every load-bearing commit adds to the corpus of context future sessions can draw on.
+- Because commit history is append-only (no rewriting published history), the investment compounds.
+
+## 028 — 2026-04-22 — Sidebar drag uses pointer events, scoped within-folder for conversations
+
+**Status:** accepted.
+**Decision:** Drag-to-reorder in the sidebar uses pointer events with `setPointerCapture` — the same pattern as BlockFeed block reordering. A `GripIcon` handle on each folder row and conversation row initiates the drag. Folders can be reordered among themselves. Conversations can be reordered within their containing folder only; cross-folder move remains a picker operation (no change). Positions are persisted via `reorderFolders` / `reorderConversations` bulk upserts, mirroring `reorderBlocks`.
+**Rejected:**
+- HTML5 Drag and Drop API: rejected because it does not fire on touch events (iOS Safari), and the app is mobile-first.
+- Cross-folder conversation drag: rejected as out of scope for this slice — the existing Block move picker already covers it and adding drop zones on folder rows would add significant complexity.
+- A new drag library (react-dnd, dnd-kit, etc.): rejected per `docs/07-ask-first.md` (requires human approval for new dependencies); pointer events with capture are sufficient for a sidebar list.
+**Consequences:**
+- `reorderFolders` and `reorderConversations` added to `src/lib/folders.ts` and `src/lib/conversations.ts` respectively. Both import `createSequentialPositions` from `src/lib/blocks.ts`.
+- Drag state tracks a `preview` array that becomes the live display order during the drag. On drop, the preview is committed to local state and the DB write fires asynchronously.
+- `data-drag-folder` and `data-drag-conv-scope` attributes on row elements allow `getDropIndex` to query the DOM for item midpoints, filtered by `data-drag-id` to exclude the active item from drop-target calculation. Every load-bearing commit adds to the corpus of context future sessions can draw on.
 
 ## 016 — 2026-04-20 — React + Vite + Tailwind v4 as the frontend stack
 

@@ -1,5 +1,6 @@
 import { supabase } from './supabase.ts'
 import { report } from './errors.ts'
+import { createSequentialPositions } from './blocks.ts'
 import type { Database } from '../db/types.ts'
 
 export type Folder = Database['public']['Tables']['folders']['Row']
@@ -36,6 +37,28 @@ export async function createFolder(
   }
 
   return data
+}
+
+export async function reorderFolders(folders: Folder[]): Promise<void> {
+  if (folders.length <= 1) return
+
+  const positions = createSequentialPositions(folders.length)
+  const updates = folders.map((folder, index) => ({
+    id: folder.id,
+    user_id: folder.user_id,
+    name: folder.name,
+    parent_id: folder.parent_id,
+    position: positions[index],
+  }))
+
+  const { error } = await supabase
+    .from('folders')
+    .upsert(updates, { onConflict: 'id' })
+
+  if (error) {
+    report('error', 'Failed to reorder folders', error)
+    throw error
+  }
 }
 
 export async function deleteFolder(folderId: string): Promise<void> {

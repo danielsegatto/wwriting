@@ -1,5 +1,6 @@
 import { supabase } from './supabase.ts'
 import { report } from './errors.ts'
+import { createSequentialPositions } from './blocks.ts'
 import type { Database } from '../db/types.ts'
 
 export type Conversation = Database['public']['Tables']['conversations']['Row']
@@ -51,6 +52,28 @@ export async function createConversation(
   }
 
   return data
+}
+
+export async function reorderConversations(conversations: Conversation[]): Promise<void> {
+  if (conversations.length <= 1) return
+
+  const positions = createSequentialPositions(conversations.length)
+  const updates = conversations.map((conv, index) => ({
+    id: conv.id,
+    user_id: conv.user_id,
+    folder_id: conv.folder_id,
+    name: conv.name,
+    position: positions[index],
+  }))
+
+  const { error } = await supabase
+    .from('conversations')
+    .upsert(updates, { onConflict: 'id' })
+
+  if (error) {
+    report('error', 'Failed to reorder conversations', error)
+    throw error
+  }
 }
 
 export async function deleteConversation(conversationId: string): Promise<void> {

@@ -12,6 +12,7 @@ Newest entries first. One line per change. Format:
 
 ## 2026-04-22
 
+- Add drag-to-reorder sidebar: grip handles on folder and conversation rows, pointer-event capture, positions persisted via bulk upsert.
 - Add realtime sync via Supabase `postgres_changes`: blocks update live in the feed, folders and conversations update live in the sidebar.
 - Add PWA manifest and service worker via `vite-plugin-pwa`: app is now installable on iOS/Android, app shell is precached, Supabase traffic excluded from SW cache.
 - Fix mobile viewport layout: replace `h-screen` with `h-dvh`, add `min-h-0` to flex children, and lock overflow so the shell never scrolls outside the BlockFeed.

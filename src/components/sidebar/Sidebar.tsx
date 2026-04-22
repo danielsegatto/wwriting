@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { listFolders, createFolder, deleteFolder } from '../../lib/folders.ts'
-import { listConversations, createConversation, deleteConversation } from '../../lib/conversations.ts'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { listFolders, createFolder, deleteFolder, reorderFolders } from '../../lib/folders.ts'
+import { listConversations, createConversation, deleteConversation, reorderConversations } from '../../lib/conversations.ts'
 import type { Folder } from '../../lib/folders.ts'
 import type { Conversation } from '../../lib/conversations.ts'
 import { supabase } from '../../lib/supabase.ts'
@@ -10,6 +10,19 @@ type CreatingState =
   | { type: 'folder' }
   | { type: 'conversation'; folderId: string }
   | null
+
+type DragState =
+  | { kind: 'folder'; activeId: string; preview: Folder[] }
+  | { kind: 'conversation'; activeId: string; scopeFolderId: string; preview: Conversation[] }
+  | null
+
+type DragSession = {
+  pointerId: number
+  activeId: string
+  kind: 'folder' | 'conversation'
+  scopeFolderId: string | null
+  preview: Folder[] | Conversation[]
+}
 
 type Props = {
   userId: string
@@ -30,6 +43,9 @@ export function Sidebar({
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [creating, setCreating] = useState<CreatingState>(null)
+  const [dragState, setDragState] = useState<DragState>(null)
+  const dragSessionRef = useRef<DragSession | null>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     Promise.all([listFolders(userId), listConversations(userId)]).then(
@@ -203,6 +219,115 @@ export function Sidebar({
     }
   }, [folders, conversations, selectedConversationId, onConversationDeleted])
 
+  // --- Drag handlers ---
+
+  const handleFolderDragStart = useCallback((
+    folderId: string,
+    event: React.PointerEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    const preview = folders
+    dragSessionRef.current = {
+      pointerId: event.pointerId,
+      activeId: folderId,
+      kind: 'folder',
+      scopeFolderId: null,
+      preview,
+    }
+    setDragState({ kind: 'folder', activeId: folderId, preview })
+  }, [folders])
+
+  const handleConversationDragStart = useCallback((
+    convId: string,
+    folderId: string,
+    event: React.PointerEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    const preview = conversations.filter((c) => c.folder_id === folderId)
+    dragSessionRef.current = {
+      pointerId: event.pointerId,
+      activeId: convId,
+      kind: 'conversation',
+      scopeFolderId: folderId,
+      preview,
+    }
+    setDragState({ kind: 'conversation', activeId: convId, scopeFolderId: folderId, preview })
+  }, [conversations])
+
+  const handleDragPointerMove = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    const session = dragSessionRef.current
+    if (!session || session.pointerId !== event.pointerId || !listRef.current) return
+    event.preventDefault()
+
+    let next: Folder[] | Conversation[]
+    if (session.kind === 'folder') {
+      const dropIndex = getDropIndex(listRef.current, event.clientY, '[data-drag-folder]', session.activeId)
+      next = moveItemToIndex(session.preview as Folder[], session.activeId, dropIndex)
+      if (haveSameOrder(next as Folder[], session.preview as Folder[])) return
+    } else {
+      const dropIndex = getDropIndex(
+        listRef.current,
+        event.clientY,
+        `[data-drag-conv-scope="${session.scopeFolderId}"]`,
+        session.activeId,
+      )
+      next = moveItemToIndex(session.preview as Conversation[], session.activeId, dropIndex)
+      if (haveSameOrder(next as Conversation[], session.preview as Conversation[])) return
+    }
+
+    session.preview = next
+    setDragState((prev) => {
+      if (!prev) return null
+      if (prev.kind === 'folder') return { ...prev, preview: next as Folder[] }
+      return { ...prev, preview: next as Conversation[] }
+    })
+  }, [])
+
+  const finishDrag = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    const session = dragSessionRef.current
+    if (!session || session.pointerId !== event.pointerId) return
+    dragSessionRef.current = null
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    setDragState(null)
+
+    if (session.kind === 'folder') {
+      const preview = session.preview as Folder[]
+      if (haveSameOrder(preview, folders)) return
+      setFolders(preview)
+      reorderFolders(preview).catch(() => {
+        // error already reported inside reorderFolders
+      })
+    } else {
+      const preview = session.preview as Conversation[]
+      const current = conversations.filter((c) => c.folder_id === session.scopeFolderId)
+      if (haveSameOrder(preview, current)) return
+      setConversations((all) => [
+        ...all.filter((c) => c.folder_id !== session.scopeFolderId),
+        ...preview,
+      ])
+      reorderConversations(preview).catch(() => {
+        // error already reported inside reorderConversations
+      })
+    }
+  }, [folders, conversations])
+
+  // Derived display lists — use drag preview while dragging
+  const displayFolders = dragState?.kind === 'folder' ? dragState.preview : folders
+  const getDisplayConversations = useCallback((folderId: string): Conversation[] => {
+    if (dragState?.kind === 'conversation' && dragState.scopeFolderId === folderId) {
+      return dragState.preview
+    }
+    return conversations.filter((c) => c.folder_id === folderId)
+  }, [dragState, conversations])
+
   return (
     <div className="flex h-full min-h-0 w-56 flex-shrink-0 flex-col border-r border-zinc-800 bg-zinc-900">
       <div className="flex items-center justify-between px-3 py-3">
@@ -226,15 +351,15 @@ export function Sidebar({
           </button>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto px-1 pb-4">
-        {folders.length === 0 && creating?.type !== 'folder' ? (
+      <div ref={listRef} className="flex-1 overflow-y-auto px-1 pb-4">
+        {displayFolders.length === 0 && creating?.type !== 'folder' ? (
           <p className="px-3 py-2 text-xs text-zinc-600">No conversations yet.</p>
         ) : (
-          folders.map((folder) => (
+          displayFolders.map((folder) => (
             <FolderRow
               key={folder.id}
               folder={folder}
-              conversations={conversations.filter((c) => c.folder_id === folder.id)}
+              conversations={getDisplayConversations(folder.id)}
               collapsed={collapsed.has(folder.id)}
               selectedConversationId={selectedConversationId}
               onToggle={toggleCollapse}
@@ -245,6 +370,12 @@ export function Sidebar({
               onConversationCreated={handleCreateConversation}
               onDeleteConversation={handleDeleteConversation}
               onCancelCreate={() => setCreating(null)}
+              isDragging={dragState?.kind === 'folder' && dragState.activeId === folder.id}
+              onFolderDragStart={handleFolderDragStart}
+              onConversationDragStart={handleConversationDragStart}
+              onDragPointerMove={handleDragPointerMove}
+              onDragEnd={finishDrag}
+              draggingConversationId={dragState?.kind === 'conversation' ? dragState.activeId : null}
             />
           ))
         )}
@@ -273,6 +404,12 @@ type FolderRowProps = {
   onConversationCreated: (name: string) => void
   onDeleteConversation: (id: string) => void
   onCancelCreate: () => void
+  isDragging: boolean
+  onFolderDragStart: (folderId: string, event: React.PointerEvent<HTMLButtonElement>) => void
+  onConversationDragStart: (convId: string, folderId: string, event: React.PointerEvent<HTMLButtonElement>) => void
+  onDragPointerMove: (event: React.PointerEvent<HTMLButtonElement>) => void
+  onDragEnd: (event: React.PointerEvent<HTMLButtonElement>) => void
+  draggingConversationId: string | null
 }
 
 function FolderRow({
@@ -288,19 +425,38 @@ function FolderRow({
   onConversationCreated,
   onDeleteConversation,
   onCancelCreate,
+  isDragging,
+  onFolderDragStart,
+  onConversationDragStart,
+  onDragPointerMove,
+  onDragEnd,
+  draggingConversationId,
 }: FolderRowProps) {
   return (
-    <div>
-      <button
-        onClick={() => onToggle(folder.id)}
-        className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-      >
-        <ChevronIcon collapsed={collapsed} />
-        <span className="flex-1 truncate">{folder.name}</span>
+    <div data-drag-folder={folder.id} data-drag-id={folder.id} className={isDragging ? 'opacity-40' : undefined}>
+      <div className="flex w-full items-center rounded text-left text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100">
+        <button
+          className="touch-none cursor-grab px-1 py-1.5 text-zinc-600 hover:text-zinc-400 active:cursor-grabbing"
+          title="Drag to reorder"
+          onPointerDown={(e) => onFolderDragStart(folder.id, e)}
+          onPointerMove={onDragPointerMove}
+          onPointerUp={onDragEnd}
+          onPointerCancel={onDragEnd}
+          onLostPointerCapture={onDragEnd}
+        >
+          <GripIcon />
+        </button>
+        <button
+          onClick={() => onToggle(folder.id)}
+          className="flex flex-1 items-center gap-1.5 py-1.5 pr-1 text-left"
+        >
+          <ChevronIcon collapsed={collapsed} />
+          <span className="flex-1 truncate">{folder.name}</span>
+        </button>
         <span
           role="button"
           onClick={(e) => { e.stopPropagation(); onCreateConversation() }}
-          className="ml-auto rounded p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+          className="rounded p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
           title="New conversation"
         >
           <PlusIcon />
@@ -308,20 +464,25 @@ function FolderRow({
         <span
           role="button"
           onClick={(e) => { e.stopPropagation(); onDeleteFolder(folder.id) }}
-          className="rounded p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+          className="rounded p-0.5 pr-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
           title="Delete folder"
         >
           <TrashIcon />
         </span>
-      </button>
+      </div>
       {!collapsed &&
         conversations.map((conv) => (
           <ConversationRow
             key={conv.id}
             conversation={conv}
+            folderId={folder.id}
             selected={conv.id === selectedConversationId}
             onSelect={onSelectConversation}
             onDelete={onDeleteConversation}
+            isDragging={draggingConversationId === conv.id}
+            onConversationDragStart={onConversationDragStart}
+            onDragPointerMove={onDragPointerMove}
+            onDragEnd={onDragEnd}
           />
         ))}
       {!collapsed && creatingConversation && (
@@ -338,26 +499,51 @@ function FolderRow({
 
 function ConversationRow({
   conversation,
+  folderId,
   selected,
   onSelect,
   onDelete,
+  isDragging,
+  onConversationDragStart,
+  onDragPointerMove,
+  onDragEnd,
 }: {
   conversation: Conversation
+  folderId: string
   selected: boolean
   onSelect: (id: string) => void
   onDelete: (id: string) => void
+  isDragging: boolean
+  onConversationDragStart: (convId: string, folderId: string, event: React.PointerEvent<HTMLButtonElement>) => void
+  onDragPointerMove: (event: React.PointerEvent<HTMLButtonElement>) => void
+  onDragEnd: (event: React.PointerEvent<HTMLButtonElement>) => void
 }) {
   return (
     <div
-      className={`flex w-full items-center rounded py-1.5 pl-6 pr-2 text-sm ${
-        selected
+      data-drag-conv-scope={folderId}
+      data-drag-id={conversation.id}
+      className={`flex w-full items-center rounded py-1.5 pl-3 pr-2 text-sm ${
+        isDragging
+          ? 'opacity-40'
+          : selected
           ? 'bg-zinc-800 text-zinc-100'
           : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
       }`}
     >
       <button
+        className="touch-none cursor-grab px-1 text-zinc-600 hover:text-zinc-400 active:cursor-grabbing"
+        title="Drag to reorder"
+        onPointerDown={(e) => onConversationDragStart(conversation.id, folderId, e)}
+        onPointerMove={onDragPointerMove}
+        onPointerUp={onDragEnd}
+        onPointerCancel={onDragEnd}
+        onLostPointerCapture={onDragEnd}
+      >
+        <GripIcon />
+      </button>
+      <button
         onClick={() => onSelect(conversation.id)}
-        className="min-w-0 flex-1 truncate text-left"
+        className="min-w-0 flex-1 truncate pl-1 text-left"
       >
         {conversation.name}
       </button>
@@ -370,6 +556,38 @@ function ConversationRow({
       </button>
     </div>
   )
+}
+
+// --- Pure utilities ---
+
+function getDropIndex(
+  container: HTMLElement,
+  pointerY: number,
+  selector: string,
+  activeId: string,
+): number {
+  const items = Array.from(container.querySelectorAll<HTMLElement>(selector)).filter(
+    (el) => el.getAttribute('data-drag-id') !== activeId,
+  )
+  for (const [i, item] of items.entries()) {
+    const { top, height } = item.getBoundingClientRect()
+    if (pointerY < top + height / 2) return i
+  }
+  return items.length
+}
+
+function moveItemToIndex<T extends { id: string }>(items: T[], activeId: string, toIndex: number): T[] {
+  const fromIndex = items.findIndex((item) => item.id === activeId)
+  if (fromIndex === -1 || fromIndex === toIndex) return items
+  const next = [...items]
+  const [item] = next.splice(fromIndex, 1)
+  next.splice(toIndex, 0, item)
+  return next
+}
+
+function haveSameOrder<T extends { id: string }>(a: T[], b: T[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((item, i) => item.id === b[i].id)
 }
 
 function getDescendantFolderIds(folders: Folder[], rootFolderId: string): Set<string> {
@@ -519,6 +737,23 @@ function TrashIcon() {
       <path d="M6 5v3.5" />
       <path d="M8 5v3.5" />
       <path d="M3.5 3.5v5.5a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1V3.5" />
+    </svg>
+  )
+}
+
+function GripIcon() {
+  return (
+    <svg
+      className="h-3 w-3"
+      viewBox="0 0 10 10"
+      fill="currentColor"
+    >
+      <circle cx="3" cy="2" r="1" />
+      <circle cx="7" cy="2" r="1" />
+      <circle cx="3" cy="5" r="1" />
+      <circle cx="7" cy="5" r="1" />
+      <circle cx="3" cy="8" r="1" />
+      <circle cx="7" cy="8" r="1" />
     </svg>
   )
 }
