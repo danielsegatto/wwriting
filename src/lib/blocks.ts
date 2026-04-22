@@ -3,6 +3,12 @@ import { report } from './errors.ts'
 import type { Database, BlockType } from '../db/types.ts'
 
 export type Block = Database['public']['Tables']['blocks']['Row']
+export type BlockSyncStatus = 'synced' | 'syncing' | 'failed'
+export type ClientBlock = Block & {
+  // Client-only optimistic send state. Never persisted.
+  syncStatus?: BlockSyncStatus
+  syncErrorMessage?: string | null
+}
 
 export function createAppendPosition(): string {
   return Date.now().toString()

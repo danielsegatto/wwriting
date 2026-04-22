@@ -6,16 +6,78 @@ import { BlockFeed } from '../components/feed/BlockFeed.tsx'
 import { Sidebar } from '../components/sidebar/Sidebar.tsx'
 import { highlightDurationMs } from '../lib/constants.ts'
 import { ensureDefaultConversation, getConversation } from '../lib/conversations.ts'
-import { listBlocks } from '../lib/blocks.ts'
-import type { Block } from '../lib/blocks.ts'
+import { createAppendPosition, createBlock, listBlocks } from '../lib/blocks.ts'
+import type { Block, ClientBlock } from '../lib/blocks.ts'
+import type { BlockType } from '../db/types.ts'
 import {
   createConversationMarkdownFilename,
   serializeConversationToMarkdown,
 } from '../lib/conversationMarkdown.ts'
 import { report } from '../lib/errors.ts'
-import { loadCitationTargetsForBlocks } from '../lib/references.ts'
+import { loadCitationTargetsForBlocks, reconcileBlockReferences } from '../lib/references.ts'
 import type { CitationTarget } from '../lib/references.ts'
 import { supabase } from '../lib/supabase.ts'
+import { reconcileInlineTagsForBlock } from '../lib/tags.ts'
+
+const sendRetryDelaysMs = [400, 1200, 3000]
+
+function toClientBlock(block: Block): ClientBlock {
+  return {
+    ...block,
+    syncStatus: 'synced',
+    syncErrorMessage: null,
+  }
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
+async function createBlockWithRetry(params: {
+  conversationId: string
+  userId: string
+  body: string
+  position: string
+  type: BlockType
+}): Promise<Block> {
+  let lastError: unknown
+
+  for (let attempt = 0; attempt <= sendRetryDelaysMs.length; attempt += 1) {
+    try {
+      return await createBlock(params)
+    } catch (error) {
+      lastError = error
+
+      if (attempt === sendRetryDelaysMs.length) break
+      await wait(sendRetryDelaysMs[attempt])
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Failed to create block')
+}
+
+async function reconcileBlockMetadataWithRetry(blockId: string, body: string, userId: string): Promise<void> {
+  let lastError: unknown
+
+  for (let attempt = 0; attempt <= sendRetryDelaysMs.length; attempt += 1) {
+    try {
+      await Promise.all([
+        reconcileInlineTagsForBlock(blockId, body, userId),
+        reconcileBlockReferences(blockId, body),
+      ])
+      return
+    } catch (error) {
+      lastError = error
+
+      if (attempt === sendRetryDelaysMs.length) break
+      await wait(sendRetryDelaysMs[attempt])
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Failed to reconcile block metadata')
+}
 
 function MenuIcon() {
   return (
@@ -96,7 +158,7 @@ export function App() {
 function AppShell({ session }: { session: Session }) {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversationTitle, setConversationTitle] = useState<string>('—')
-  const [blocks, setBlocks] = useState<Block[]>([])
+  const [blocks, setBlocks] = useState<ClientBlock[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [pendingJumpTarget, setPendingJumpTarget] = useState<{
     blockId: string
@@ -123,7 +185,7 @@ function AppShell({ session }: { session: Session }) {
     listBlocks(conversationId)
       .then((nextBlocks) => {
         if (!cancelled) {
-          setBlocks(nextBlocks)
+          setBlocks(nextBlocks.map(toClientBlock))
         }
       })
       .catch((err) => report('error', 'Failed to load blocks', err))
@@ -149,20 +211,38 @@ function AppShell({ session }: { session: Session }) {
         },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            const block = payload.new as Block
+            const block = toClientBlock(payload.new as Block)
             setBlocks((prev) => {
-              if (prev.some((b) => b.id === block.id)) return prev
+              const existingIndex = prev.findIndex((b) => b.id === block.id)
+              if (existingIndex >= 0) {
+                const next = [...prev]
+                next[existingIndex] = {
+                  ...prev[existingIndex],
+                  ...block,
+                }
+                return next
+              }
+
               const next = [...prev, block]
               next.sort((a, b) => (a.position > b.position ? 1 : a.position < b.position ? -1 : 0))
               return next
             })
           } else if (payload.eventType === 'UPDATE') {
-            const block = payload.new as Block
+            const block = toClientBlock(payload.new as Block)
             if (block.conversation_id !== conversationId) {
               // Block was moved to another conversation — remove it
               setBlocks((prev) => prev.filter((b) => b.id !== block.id))
             } else {
-              setBlocks((prev) => prev.map((b) => (b.id === block.id ? block : b)))
+              setBlocks((prev) =>
+                prev.map((b) =>
+                  b.id === block.id
+                    ? {
+                        ...b,
+                        ...block,
+                      }
+                    : b,
+                ),
+              )
             }
           } else if (payload.eventType === 'DELETE') {
             const blockId = (payload.old as { id: string }).id
@@ -201,9 +281,112 @@ function AppShell({ session }: { session: Session }) {
     }
   }, [conversationId])
 
-  const handleBlockCreated = useCallback((block: Block) => {
-    setBlocks((prev) => [...prev, block])
+  const persistOptimisticBlock = useCallback(async (optimisticBlock: ClientBlock) => {
+    try {
+      const persistedBlock = await createBlockWithRetry({
+        conversationId: optimisticBlock.conversation_id,
+        userId: optimisticBlock.user_id,
+        body: optimisticBlock.body ?? '',
+        position: optimisticBlock.position,
+        type: optimisticBlock.type,
+      })
+
+      setBlocks((prev) => {
+        const tempIndex = prev.findIndex((block) => block.id === optimisticBlock.id)
+        const nextBlock = toClientBlock(persistedBlock)
+
+        if (tempIndex === -1) {
+          if (prev.some((block) => block.id === persistedBlock.id)) {
+            return prev
+          }
+
+          return prev
+        }
+
+        const next = [...prev]
+        const existingRealIndex = next.findIndex((block) => block.id === persistedBlock.id)
+        if (existingRealIndex >= 0) {
+          next.splice(tempIndex, 1)
+          next[existingRealIndex > tempIndex ? existingRealIndex - 1 : existingRealIndex] = {
+            ...next[existingRealIndex > tempIndex ? existingRealIndex - 1 : existingRealIndex],
+            ...nextBlock,
+          }
+          return next
+        }
+
+        next[tempIndex] = nextBlock
+        return next
+      })
+
+      try {
+        await reconcileBlockMetadataWithRetry(
+          persistedBlock.id,
+          persistedBlock.body ?? '',
+          persistedBlock.user_id,
+        )
+      } catch (error) {
+        report('warn', 'Block saved but tag/reference sync is still pending', error)
+      }
+    } catch (error) {
+      setBlocks((prev) =>
+        prev.map((block) =>
+          block.id === optimisticBlock.id
+            ? {
+                ...block,
+                syncStatus: 'failed',
+                syncErrorMessage:
+                  error instanceof Error ? error.message : 'Send failed after retrying',
+              }
+            : block,
+        ),
+      )
+      report('error', 'Failed to send block', error)
+    }
   }, [])
+
+  const handleSendBlock = useCallback((body: string) => {
+    if (!conversationId) return
+
+    const type: BlockType = /^---+$/.test(body) ? 'divider' : 'text'
+    const optimisticBlock: ClientBlock = {
+      id: `local:${crypto.randomUUID()}`,
+      user_id: session.user.id,
+      conversation_id: conversationId,
+      type,
+      body,
+      position: createAppendPosition(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      syncStatus: 'syncing',
+      syncErrorMessage: null,
+    }
+
+    setBlocks((prev) => [...prev, optimisticBlock])
+    void persistOptimisticBlock(optimisticBlock)
+  }, [conversationId, persistOptimisticBlock, session.user.id])
+
+  const handleRetryBlock = useCallback((blockId: string) => {
+    setBlocks((prev) => {
+      const target = prev.find((block) => block.id === blockId)
+      if (!target || target.syncStatus !== 'failed') return prev
+
+      void persistOptimisticBlock({
+        ...target,
+        syncStatus: 'syncing',
+        syncErrorMessage: null,
+      })
+
+      return prev.map((block) =>
+        block.id === blockId
+          ? {
+              ...block,
+              syncStatus: 'syncing',
+              syncErrorMessage: null,
+            }
+          : block,
+      )
+    })
+  }, [persistOptimisticBlock])
 
   const handleSelectConversation = useCallback((id: string) => {
     setBlocks([])
@@ -393,12 +576,12 @@ function AppShell({ session }: { session: Session }) {
               onBlockRemoved={(blockId) => {
                 setBlocks((prev) => prev.filter((block) => block.id !== blockId))
               }}
+              onRetryBlock={handleRetryBlock}
               onJumpToBlock={handleJumpToBlock}
             />
             <Composer
-              conversationId={conversationId}
               userId={session.user.id}
-              onBlockCreated={handleBlockCreated}
+              onSendBlock={handleSendBlock}
             />
           </>
         ) : (

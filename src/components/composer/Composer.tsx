@@ -1,22 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createAppendPosition, createBlock } from '../../lib/blocks.ts'
 import {
   blockPreviewCollapseThreshold,
   citationPickerPreviewLength,
 } from '../../lib/constants.ts'
 import { report } from '../../lib/errors.ts'
 import {
-  reconcileBlockReferences,
   searchCitationCandidates,
 } from '../../lib/references.ts'
 import type { CitationCandidate } from '../../lib/references.ts'
-import { listTags, reconcileInlineTagsForBlock } from '../../lib/tags.ts'
+import { listTags } from '../../lib/tags.ts'
 import type { Tag } from '../../lib/tags.ts'
 
 type Props = {
-  conversationId: string
   userId: string
-  onBlockCreated?: (block: import('../../lib/blocks.ts').Block) => void
+  onSendBlock?: (body: string) => void
 }
 
 type CitationPickerState = {
@@ -29,7 +26,6 @@ type TagPickerState = {
   query: string
 }
 
-const DIVIDER_RE = /^---+$/
 const maxTagSuggestions = 8
 
 function normalizeTagQuery(value: string): string {
@@ -110,9 +106,8 @@ function CitationCandidateRow({
   )
 }
 
-export function Composer({ conversationId, userId, onBlockCreated }: Props) {
+export function Composer({ userId, onSendBlock }: Props) {
   const [body, setBody] = useState('')
-  const [sending, setSending] = useState(false)
   const [availableTags, setAvailableTags] = useState<Tag[]>([])
   const [citationPicker, setCitationPicker] = useState<CitationPickerState | null>(null)
   const [citationQuery, setCitationQuery] = useState('')
@@ -282,31 +277,23 @@ export function Composer({ conversationId, userId, onBlockCreated }: Props) {
 
   async function handleSend() {
     const trimmed = body.trim()
-    if (!trimmed || sending) return
+    if (!trimmed) return
 
-    setSending(true)
     try {
-      const type = DIVIDER_RE.test(trimmed) ? 'divider' : 'text'
-      const position = createAppendPosition()
-
-      const block = await createBlock({ conversationId, userId, body: trimmed, position, type })
-      onBlockCreated?.(block)
-
-      await Promise.all([
-        reconcileInlineTagsForBlock(block.id, trimmed, userId),
-        reconcileBlockReferences(block.id, trimmed),
-      ])
-
       setBody('')
+      setCitationPicker(null)
+      setCitationQuery('')
+      setCitationCandidates([])
+      setCitationPickerBusy(false)
+      setTagPicker(null)
       const el = textareaRef.current
       if (el) {
         el.style.height = 'auto'
         el.focus()
       }
+      onSendBlock?.(trimmed)
     } catch (err) {
       report('error', 'Failed to send block', err)
-    } finally {
-      setSending(false)
     }
   }
 
@@ -498,7 +485,7 @@ export function Composer({ conversationId, userId, onBlockCreated }: Props) {
         type="button"
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => void handleSend()}
-        disabled={isEmpty || sending}
+        disabled={isEmpty}
         className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500"
         aria-label="Send"
       >

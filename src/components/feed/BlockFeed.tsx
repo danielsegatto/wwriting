@@ -7,7 +7,7 @@ import {
   reorderBlocks,
   updateBlock,
 } from '../../lib/blocks.ts'
-import type { Block } from '../../lib/blocks.ts'
+import type { Block, BlockSyncStatus, ClientBlock } from '../../lib/blocks.ts'
 import {
   blockPreviewCollapseThreshold,
   citationPickerPreviewLength,
@@ -36,7 +36,7 @@ import type { AppliedTag, Tag } from '../../lib/tags.ts'
 import { report } from '../../lib/errors.ts'
 
 type Props = {
-  blocks: Block[]
+  blocks: ClientBlock[]
   userId: string
   conversationId: string
   highlightedBlockId: string | null
@@ -44,6 +44,7 @@ type Props = {
   onBlocksReordered: (blocks: Block[]) => void
   onBlockUpdated: (block: Block) => void
   onBlockRemoved: (blockId: string) => void
+  onRetryBlock: (blockId: string) => void
   onJumpToBlock: (target: CitationTarget) => void
 }
 
@@ -55,12 +56,12 @@ type BulkActionMode = 'move' | 'delete' | null
 type DragState = {
   activeBlockId: string
   conversationId: string
-  previewBlocks: Block[]
+  previewBlocks: ClientBlock[]
   ghostLabel: string
 } | null
 type OptimisticOrderState = {
   conversationId: string
-  blocks: Block[]
+  blocks: ClientBlock[]
 } | null
 type SelectionState = {
   conversationId: string
@@ -162,6 +163,8 @@ function BlockItem({
   editCitationCandidates,
   editCursorPosition,
   blockBusy,
+  syncStatus,
+  syncErrorMessage,
   selected,
   selectionDisabled,
   isDragging,
@@ -189,9 +192,10 @@ function BlockItem({
   onMoveToConversation,
   onStartDelete,
   onConfirmDelete,
+  onRetrySync,
   onJumpToBlock,
 }: {
-  block: Block
+  block: ClientBlock
   tags: AppliedTag[]
   folders: Folder[]
   conversations: Conversation[]
@@ -208,6 +212,8 @@ function BlockItem({
   editCitationCandidates: CitationCandidate[]
   editCursorPosition: number | null
   blockBusy: 'tag' | 'edit' | 'move' | 'delete' | null
+  syncStatus: BlockSyncStatus
+  syncErrorMessage: string | null | undefined
   selected: boolean
   selectionDisabled: boolean
   isDragging: boolean
@@ -235,6 +241,7 @@ function BlockItem({
   onMoveToConversation: (conversationId: string) => void
   onStartDelete: () => void
   onConfirmDelete: () => void
+  onRetrySync: () => void
   onJumpToBlock: (target: CitationTarget) => void
 }) {
   const itemRef = useRef<HTMLDivElement>(null)
@@ -311,6 +318,7 @@ function BlockItem({
   const trimmedEditValue = editValue.trim()
   const canSaveEdit = trimmedEditValue !== '' && trimmedEditValue !== (block.body ?? '')
   const renderedBody = renderMarkdown(block.body ?? '', citationTargetsById)
+  const isSynced = syncStatus === 'synced'
 
   function clearLongPressTimer() {
     if (longPressTimerRef.current === null) return
@@ -319,7 +327,7 @@ function BlockItem({
   }
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
-    if (actionMode === 'edit' || isInteractiveTarget(event.target)) return
+    if (!isSynced || actionMode === 'edit' || isInteractiveTarget(event.target)) return
     if (event.pointerType === 'mouse') return
 
     clearLongPressTimer()
@@ -334,7 +342,7 @@ function BlockItem({
   }
 
   function handleDoubleClick(event: React.MouseEvent<HTMLDivElement>) {
-    if (actionMode === 'edit' || isInteractiveTarget(event.target)) return
+    if (!isSynced || actionMode === 'edit' || isInteractiveTarget(event.target)) return
     onOpenActionMenu()
   }
 
@@ -366,6 +374,10 @@ function BlockItem({
       className={`relative scroll-mt-24 rounded-2xl border px-4 py-3 transition ${
         highlighted
           ? 'border-blue-700 bg-blue-950/25 ring-1 ring-blue-500/80'
+          : syncStatus === 'failed'
+            ? 'border-red-900/70 bg-red-950/15 ring-1 ring-red-900/40'
+            : syncStatus === 'syncing'
+              ? 'border-blue-900/60 bg-blue-950/10 ring-1 ring-blue-900/30'
           : selected
             ? 'border-zinc-700 bg-zinc-900 ring-1 ring-blue-500/50'
           : 'border-zinc-800 bg-zinc-900/70'
@@ -385,7 +397,7 @@ function BlockItem({
             type="checkbox"
             checked={selected}
             onChange={onToggleSelected}
-            disabled={selectionDisabled}
+            disabled={selectionDisabled || !isSynced}
             className="sr-only"
           />
           <CheckIcon />
@@ -394,7 +406,7 @@ function BlockItem({
           type="button"
           onPointerDown={onDragHandlePointerDown}
           onClick={(event) => event.preventDefault()}
-          disabled={dragDisabled}
+          disabled={dragDisabled || !isSynced}
           className="touch-none rounded-full border border-zinc-700 p-2 text-zinc-400 transition hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
           aria-label="Drag block to reorder"
           title="Drag block to reorder"
@@ -403,6 +415,25 @@ function BlockItem({
         </button>
       </div>
       <div className="absolute right-3 top-3 flex items-center gap-2">
+        {syncStatus === 'syncing' && (
+          <span className="text-[11px] uppercase tracking-wide text-blue-300">
+            Sending…
+          </span>
+        )}
+        {syncStatus === 'failed' && (
+          <>
+            <span className="text-[11px] uppercase tracking-wide text-red-300">
+              Send failed
+            </span>
+            <button
+              type="button"
+              onClick={onRetrySync}
+              className="rounded-full border border-red-800/80 px-2.5 py-1 text-[11px] uppercase tracking-wide text-red-200 hover:bg-red-950/50"
+            >
+              Retry
+            </button>
+          </>
+        )}
         {blockBusy && (
           <span className="text-[11px] uppercase tracking-wide text-zinc-500">
             Working…
@@ -411,6 +442,7 @@ function BlockItem({
         <button
           type="button"
           onClick={onOpenActionMenu}
+          disabled={!isSynced}
           className="rounded-full border border-zinc-700 p-2 text-zinc-400 hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-100"
           aria-label="Block actions"
           title="Block actions"
@@ -418,8 +450,13 @@ function BlockItem({
           <DotsIcon />
         </button>
       </div>
+      {syncStatus === 'failed' && syncErrorMessage && (
+        <p className="mb-3 pl-12 pr-14 text-xs text-red-300/90">
+          {syncErrorMessage}
+        </p>
+      )}
 
-        {actionMode === 'menu' && (
+      {actionMode === 'menu' && (
         <div className="absolute right-3 top-14 z-20 w-40 rounded-2xl border border-zinc-700 bg-zinc-900 p-1.5 shadow-2xl shadow-black/40">
           {block.type === 'text' && <ActionMenuButton label="Edit block" onClick={onStartEdit} />}
           <ActionMenuButton label="Move block" onClick={onStartMove} />
@@ -650,6 +687,7 @@ function BlockItem({
               <button
                 type="button"
                 onClick={onOpenPicker}
+                disabled={!isSynced}
                 className="rounded-full border border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-300 hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-100"
               >
                 + Tag
@@ -725,6 +763,7 @@ export function BlockFeed({
   onBlocksReordered,
   onBlockUpdated,
   onBlockRemoved,
+  onRetryBlock,
   onJumpToBlock,
 }: Props) {
   const listRef = useRef<HTMLDivElement>(null)
@@ -734,7 +773,7 @@ export function BlockFeed({
   const dragSessionRef = useRef<{
     activeBlockId: string
     pointerId: number
-    previewBlocks: Block[]
+    previewBlocks: ClientBlock[]
     ghostLabel: string
   } | null>(null)
   const blockGhostRef = useRef<HTMLDivElement>(null)
@@ -766,6 +805,8 @@ export function BlockFeed({
   useEffect(() => {
     blocksRef.current = blocks
   }, [blocks])
+
+  const syncedBlocks = blocks.filter((block) => block.syncStatus !== 'failed' && block.syncStatus !== 'syncing')
 
   useEffect(() => {
     if (blocks.length > prevLenRef.current) {
@@ -804,13 +845,13 @@ export function BlockFeed({
   useEffect(() => {
     let cancelled = false
 
-    if (blocks.length === 0) {
+    if (syncedBlocks.length === 0) {
       return () => {
         cancelled = true
       }
     }
 
-    listTagsForBlocks(blocks.map((block) => block.id))
+    listTagsForBlocks(syncedBlocks.map((block) => block.id))
       .then((nextTagsByBlockId) => {
         if (!cancelled) setTagsByBlockId(nextTagsByBlockId)
       })
@@ -821,18 +862,18 @@ export function BlockFeed({
     return () => {
       cancelled = true
     }
-  }, [blocks])
+  }, [syncedBlocks])
 
   useEffect(() => {
     let cancelled = false
 
-    if (blocks.length === 0) {
+    if (syncedBlocks.length === 0) {
       return () => {
         cancelled = true
       }
     }
 
-    loadCitationTargetsForBlocks(blocks)
+    loadCitationTargetsForBlocks(syncedBlocks)
       .then((nextCitationTargetsById) => {
         if (!cancelled) {
           setCitationTargetsById(nextCitationTargetsById)
@@ -845,7 +886,7 @@ export function BlockFeed({
     return () => {
       cancelled = true
     }
-  }, [blocks])
+  }, [syncedBlocks])
 
   useEffect(() => {
     if (!highlightedBlockId) return
@@ -887,13 +928,19 @@ export function BlockFeed({
   }, [editCitationPicker, editCitationQuery, userId])
 
   const activePickerBlockId =
-    pickerBlockId && blocks.some((block) => block.id === pickerBlockId) ? pickerBlockId : null
+    pickerBlockId && blocks.some((block) => block.id === pickerBlockId && block.syncStatus === 'synced')
+      ? pickerBlockId
+      : null
   const activeEditCitationPicker =
-    editCitationPicker && blocks.some((block) => block.id === editCitationPicker.blockId)
+    editCitationPicker && blocks.some((block) =>
+      block.id === editCitationPicker.blockId && block.syncStatus === 'synced')
       ? editCitationPicker
       : null
   const activeActionState =
-    actionState && blocks.some((block) => block.id === actionState.blockId) ? actionState : null
+    actionState && blocks.some((block) =>
+      block.id === actionState.blockId && block.syncStatus === 'synced')
+      ? actionState
+      : null
   const normalizedPickerQuery = normalizeTagQuery(pickerQuery)
   const suggestions =
     normalizedPickerQuery === ''
@@ -939,6 +986,8 @@ export function BlockFeed({
 
   function toggleSelectedBlock(blockId: string) {
     if (selectionLocked) return
+    const block = displayBlocks.find((item) => item.id === blockId)
+    if (!block || block.syncStatus !== 'synced') return
 
     const currentIds = selectionState?.conversationId === conversationId ? selectionState.blockIds : []
     const nextIds = currentIds.includes(blockId)
@@ -971,6 +1020,8 @@ export function BlockFeed({
   }
 
   function openAction(block: Block, mode: ActionMode) {
+    const clientBlock = blocks.find((item) => item.id === block.id)
+    if (clientBlock?.syncStatus !== 'synced') return
     resetTransientUi()
     setActionState({ blockId: block.id, mode })
     setEditValue(mode === 'edit' ? block.body ?? '' : '')
@@ -1065,7 +1116,8 @@ export function BlockFeed({
   }
 
   function handleDragHandlePointerDown(block: Block, event: React.PointerEvent<HTMLButtonElement>) {
-    if (busyState || reorderBusyBlockId || bulkBusyKind) return
+    const clientBlock = blocks.find((item) => item.id === block.id)
+    if (busyState || reorderBusyBlockId || bulkBusyKind || clientBlock?.syncStatus !== 'synced') return
 
     event.preventDefault()
     event.stopPropagation()
@@ -1546,6 +1598,8 @@ export function BlockFeed({
                   ? 'move'
                   : null
             }
+            syncStatus={block.syncStatus ?? 'synced'}
+            syncErrorMessage={block.syncErrorMessage}
             selected={selectedBlockIdSet.has(block.id)}
             selectionDisabled={selectionLocked}
             isDragging={dragState?.activeBlockId === block.id}
@@ -1594,6 +1648,7 @@ export function BlockFeed({
               void handleMoveBlock(block, destinationConversationId)}
             onStartDelete={() => openAction(block, 'delete')}
             onConfirmDelete={() => void handleDeleteBlock(block)}
+            onRetrySync={() => onRetryBlock(block.id)}
             onJumpToBlock={onJumpToBlock}
           />
         ))}

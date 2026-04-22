@@ -306,3 +306,17 @@ An append-only log. Each decision records what was chosen, what was rejected, an
 - `start_url` and `scope` in the manifest must match the production base path (`/wwriting/`); the vite config reads `command` at definition time and sets these conditionally.
 - `scripts/gen-icons.mjs` documents the icon regeneration procedure. If `favicon.svg` changes, re-run the script and commit the updated PNGs.
 - The build emits `dist/sw.js`, `dist/workbox-*.js`, and `dist/manifest.webmanifest`. The deploy workflow picks these up automatically since it publishes all of `dist/`.
+
+## 028 — 2026-04-22 — Optimistic send uses client-only pending rows; block actions wait for ack
+
+**Status:** accepted.
+**Decision:** Optimistic state for sending is implemented with client-only temporary Blocks that are appended to the feed immediately, then replaced with the persisted row after Supabase acknowledges the insert. While a Block is still `syncing` or has reached `failed`, feed-local actions stay disabled; the failed state surfaces an inline retry button on the Block card.
+**Rejected:**
+- Waiting for the insert round-trip before showing the Block: rejected per §013 because it makes the hot writing path feel laggy.
+- Letting pending Blocks participate fully in edit, move, delete, drag, tag, and citation-target flows: rejected because the rest of the feed currently assumes a stable persisted Block ID and server-backed metadata rows.
+- Hiding failed sends by removing the temporary Block: rejected because it loses the user's text at exactly the moment they most need reassurance and recovery.
+**Consequences:**
+- `src/lib/blocks.ts` now defines a client-only `syncStatus` / `syncErrorMessage` layer on top of persisted Block rows. This state must never be written to the database.
+- `src/app/App.tsx` owns the send retry loop and the swap from `local:<uuid>` temporary IDs to real database IDs, rather than leaving send persistence inside the Composer.
+- `src/components/feed/BlockFeed.tsx` must ignore non-synced Blocks when loading tag metadata and citation targets, because those helpers depend on persisted Block IDs.
+- The current optimistic scope covers send only. Edit remains server-round-trip-first even though §013 mentions send/edit; if optimistic edit is added later, it should build on the same client-only status model instead of inventing a second one.

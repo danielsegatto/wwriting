@@ -12,6 +12,7 @@ Newest entries first. One line per change. Format:
 
 ## 2026-04-22
 
+- Add optimistic local send with retry/backoff, failed-send retry UI, and client-only pending Block state in the feed.
 - Pin Vite back to the latest `vite-plugin-pwa`-compatible line so GitHub Pages `npm ci` succeeds again.
 - Add floating ghost element and fix sidebar drag losing pointer capture after one step: ghost tracks pointer via imperative ref updates; capture moved from grip button to the always-mounted list container so reordering works for more than one position.
 - Add drag-to-reorder sidebar: grip handles on folder and conversation rows, pointer-event capture, positions persisted via bulk upsert.

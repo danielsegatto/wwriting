@@ -20,6 +20,7 @@
 - Citations are live across the MVP writing loop. Typing `@` in `src/components/composer/Composer.tsx` at the start of input or after whitespace opens a citation picker over existing text Blocks, inserting raw `{{block:<uuid>}}` tokens into the body. `src/lib/references.ts` reconciles `block_references` on create/edit, and `src/lib/markdown.ts` renders citation pills in `src/components/feed/BlockFeed.tsx`. Clicking a citation pill jumps to the target Block, switching Conversations when needed and temporarily highlighting the destination Block. Missing targets render as `[deleted]`.
 - Tagging now has two authoring paths. Inline `#hashtag` text still reconciles on save, and the composer now opens a live tag picker while typing `#` so existing Tags can be inserted quickly or new Tags can be created from the current token before the Block is sent.
 - Conversation export is live from the main header in `src/app/App.tsx`. The current Conversation can be copied to the clipboard or downloaded as Markdown; export prepends an `# H1` title, emits divider Blocks as literal `---`, translates `{{block:<uuid>}}` tokens into Markdown links to `/b/<uuid>`, and leaves missing targets as `[deleted]`. Formatting lives in `src/lib/conversationMarkdown.ts` with unit tests.
+- Optimistic local send is live. Pressing Enter in `src/components/composer/Composer.tsx` appends a client-only pending Block to the feed immediately; `src/app/App.tsx` retries the actual insert with backoff, swaps the pending Block for the real row on success, and marks the Block failed with a retry button if all attempts fail. Block actions stay disabled until the server acknowledges the row.
 
 ## Reference prototype
 
@@ -57,7 +58,7 @@ When building the real thing under `src/`:
 - [x] Export Conversation as Markdown (download + copy)
 - [ ] Export full workspace as zip of `.md` files
 - [x] Realtime sync: `postgres_changes` subscriptions in `AppShell` (blocks for the active conversation) and `Sidebar` (folders + conversations). INSERT/UPDATE/DELETE handled with deduplication; Supabase free tier covers single-user traffic easily.
-- [ ] Optimistic local state on send
+- [x] Optimistic local state on send
 - [x] PWA manifest + service worker (installable on iOS via `vite-plugin-pwa`; icons at `public/pwa-{192,512}x{192,512}.png` + `public/apple-touch-icon.png`; SW caches app shell, never caches `*.supabase.co`)
 
 ## Planned — Phase 2 (connective tissue)
